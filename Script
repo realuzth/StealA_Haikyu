@@ -190,7 +190,7 @@ lastUpdate.Parent = footer
 -- Character data (in the requested order)
 local characterNames = {
     "Timeskip Hinata",
-    "Awakened Tobio Kageyama",
+    "Komori Motoya",
     "Awakened Kiyoomi Sakusa",
     "Awakened Korai Hoshiumi",
     "Awakened Wakatoshi Ushijima",
