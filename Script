@@ -28,7 +28,7 @@ local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 
 -- Character data (in the requested order)
 local characterNames = {
-    "Yuu Nishinoya",
+    "Timeskip Hinata",
     "Awakened Tobio Kageyama",
     "Awakened Kiyoomi Sakusa",
     "Awakened Korai Hoshiumi",
