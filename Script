@@ -1,0 +1,619 @@
+-- Character Tracker UI for Roblox with Alarm Sound
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local SoundService = game:GetService("SoundService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Create main screen GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CharacterTracker"
+screenGui.Parent = playerGui
+screenGui.ResetOnSpawn = false
+
+-- Main container frame - Made wider to fit longer names
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 700, 0, 460)  -- Reduced height to 460
+mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+mainFrame.BackgroundColor3 = Color3.fromRGB(22, 36, 71)
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = screenGui
+
+-- Header
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.Size = UDim2.new(1, 0, 0, 40)
+header.Position = UDim2.new(0, 0, 0, 0)
+header.BackgroundColor3 = Color3.fromRGB(15, 52, 96)
+header.BorderSizePixel = 0
+header.Parent = mainFrame
+
+local title = Instance.new("TextLabel")
+title.Name = "Title"
+title.Size = UDim2.new(1, -20, 1, 0)
+title.Position = UDim2.new(0, 10, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "Character Presence Tracker"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = header
+
+-- Search box at the top
+local searchBox = Instance.new("TextBox")
+searchBox.Name = "SearchBox"
+searchBox.Size = UDim2.new(1, -20, 0, 30)
+searchBox.Position = UDim2.new(0, 10, 0, 45)
+searchBox.BackgroundColor3 = Color3.fromRGB(45, 80, 130)
+searchBox.PlaceholderText = "Search characters..."
+searchBox.Text = ""
+searchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+searchBox.Font = Enum.Font.Gotham
+searchBox.TextSize = 14
+searchBox.Parent = mainFrame
+
+-- Characters panel
+local charactersPanel = Instance.new("Frame")
+charactersPanel.Name = "CharactersPanel"
+charactersPanel.Size = UDim2.new(0, 250, 0, 310)  -- Reduced height to 310
+charactersPanel.Position = UDim2.new(0, 0, 0, 80)
+charactersPanel.BackgroundColor3 = Color3.fromRGB(31, 64, 104)
+charactersPanel.BorderSizePixel = 0
+charactersPanel.ClipsDescendants = true
+charactersPanel.Parent = mainFrame
+
+local charactersScrolling = Instance.new("ScrollingFrame")
+charactersScrolling.Name = "CharactersScrolling"
+charactersScrolling.Size = UDim2.new(1, 0, 1, -30)
+charactersScrolling.Position = UDim2.new(0, 0, 0, 30)
+charactersScrolling.BackgroundTransparency = 1
+charactersScrolling.BorderSizePixel = 0
+charactersScrolling.ScrollBarThickness = 6
+charactersScrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
+charactersScrolling.Parent = charactersPanel
+
+-- Characters title
+local charactersTitle = Instance.new("TextLabel")
+charactersTitle.Name = "CharactersTitle"
+charactersTitle.Size = UDim2.new(1, -20, 0, 25)
+charactersTitle.Position = UDim2.new(0, 10, 0, 5)
+charactersTitle.BackgroundTransparency = 1
+charactersTitle.Text = "Characters"
+charactersTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+charactersTitle.Font = Enum.Font.GothamBold
+charactersTitle.TextSize = 14
+charactersTitle.TextXAlignment = Enum.TextXAlignment.Left
+charactersTitle.Parent = charactersPanel
+
+-- Tracking panel
+local trackingPanel = Instance.new("Frame")
+trackingPanel.Name = "TrackingPanel"
+trackingPanel.Size = UDim2.new(0, 430, 0, 310)  -- Reduced height to 310
+trackingPanel.Position = UDim2.new(0, 260, 0, 80)
+trackingPanel.BackgroundTransparency = 1
+trackingPanel.BorderSizePixel = 0
+trackingPanel.ClipsDescendants = true
+trackingPanel.Parent = mainFrame
+
+local trackingScrolling = Instance.new("ScrollingFrame")
+trackingScrolling.Name = "TrackingScrolling"
+trackingScrolling.Size = UDim2.new(1, 0, 1, -30)
+trackingScrolling.Position = UDim2.new(0, 0, 0, 30)
+trackingScrolling.BackgroundTransparency = 1
+trackingScrolling.BorderSizePixel = 0
+trackingScrolling.ScrollBarThickness = 6
+trackingScrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
+trackingScrolling.Parent = trackingPanel
+
+-- Header for tracking panel
+local trackingHeader = Instance.new("Frame")
+trackingHeader.Name = "TrackingHeader"
+trackingHeader.Size = UDim2.new(1, -10, 0, 25)
+trackingHeader.Position = UDim2.new(0, 5, 0, 5)
+trackingHeader.BackgroundColor3 = Color3.fromRGB(15, 52, 96)
+trackingHeader.BorderSizePixel = 0
+trackingHeader.Parent = trackingPanel
+
+-- Adjusted column widths to accommodate longer names
+local nameHeader = Instance.new("TextLabel")
+nameHeader.Name = "NameHeader"
+nameHeader.Size = UDim2.new(0.45, 0, 1, 0)
+nameHeader.Position = UDim2.new(0, 5, 0, 0)
+nameHeader.BackgroundTransparency = 1
+nameHeader.Text = "Character"
+nameHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+nameHeader.Font = Enum.Font.GothamBold
+nameHeader.TextSize = 12
+nameHeader.TextXAlignment = Enum.TextXAlignment.Left
+nameHeader.Parent = trackingHeader
+
+local statusHeader = Instance.new("TextLabel")
+statusHeader.Name = "StatusHeader"
+statusHeader.Size = UDim2.new(0.2, 0, 1, 0)
+statusHeader.Position = UDim2.new(0.45, 0, 0, 0)
+statusHeader.BackgroundTransparency = 1
+statusHeader.Text = "Status"
+statusHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+statusHeader.Font = Enum.Font.GothamBold
+statusHeader.TextSize = 12
+statusHeader.Parent = trackingHeader
+
+local countHeader = Instance.new("TextLabel")
+countHeader.Name = "CountHeader"
+countHeader.Size = UDim2.new(0.15, 0, 1, 0)
+countHeader.Position = UDim2.new(0.65, 0, 0, 0)
+countHeader.BackgroundTransparency = 1
+countHeader.Text = "Count"
+countHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+countHeader.Font = Enum.Font.GothamBold
+countHeader.TextSize = 12
+countHeader.Parent = trackingHeader
+
+local timeHeader = Instance.new("TextLabel")
+timeHeader.Name = "TimeHeader"
+timeHeader.Size = UDim2.new(0.2, 0, 1, 0)
+timeHeader.Position = UDim2.new(0.8, 0, 0, 0)
+timeHeader.BackgroundTransparency = 1
+timeHeader.Text = "Time"
+timeHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+timeHeader.Font = Enum.Font.GothamBold
+timeHeader.TextSize = 12
+timeHeader.Parent = trackingHeader
+
+-- Footer
+local footer = Instance.new("Frame")
+footer.Name = "Footer"
+footer.Size = UDim2.new(1, 0, 0, 25)
+footer.Position = UDim2.new(0, 0, 0, 395)  -- Adjusted position (395 instead of 435)
+footer.BackgroundColor3 = Color3.fromRGB(15, 52, 96)
+footer.BorderSizePixel = 0
+footer.Parent = mainFrame
+
+local lastUpdate = Instance.new("TextLabel")
+lastUpdate.Name = "LastUpdate"
+lastUpdate.Size = UDim2.new(1, -20, 1, 0)
+lastUpdate.Position = UDim2.new(0, 10, 0, 0)
+lastUpdate.BackgroundTransparency = 1
+lastUpdate.Text = "Last updated: Just now"
+lastUpdate.TextColor3 = Color3.fromRGB(160, 160, 160)
+lastUpdate.Font = Enum.Font.Gotham
+lastUpdate.TextSize = 12
+lastUpdate.TextXAlignment = Enum.TextXAlignment.Left
+lastUpdate.Parent = footer
+
+-- Character data (in the requested order)
+local characterNames = {
+    "Timeskip Hinata",
+    "Awakened Tobio Kageyama",
+    "Awakened Kiyoomi Sakusa",
+    "Awakened Korai Hoshiumi",
+    "Awakened Wakatoshi Ushijima",
+    "Golden Timeskip Hinata",
+    "Golden Awakened Tobio Kageyama",
+    "Golden Awakened Kiyoomi Sakusa",
+    "Golden Awakened Korai Hoshiumi",
+    "Golden Awakened Wakatoshi Ushijima",
+    "Diamond Timeskip Hinata",
+    "Diamond Awakened Tobio Kageyama",
+    "Diamond Awakened Kiyoomi Sakusa",
+    "Diamond Awakened Korai Hoshiumi",
+    "Diamond Awakened Wakatoshi Ushijima",
+    "Diamond Shinsuke Kita"
+}
+
+-- Function to shorten display names
+local function shortenName(name)
+    name = name:gsub("Golden", "Gold")
+    name = name:gsub("Diamond", "Dia")
+    
+    -- Special handling for long names
+    if name == "Awakened Wakatoshi Ushijima" then
+        return "Awakened Wakatoshi Ushijima"
+    elseif name == "Golden Awakened Tobio Kageyama" then
+        return "Gold Awakened Tobio Kageyama"
+    elseif name == "Golden Awakened Kiyoomi Sakusa" then
+        return "Gold Awakened Kiyoomi Sakusa"
+    elseif name == "Golden Awakened Korai Hoshiumi" then
+        return "Gold Awakened Korai Hoshiumi"
+    elseif name == "Golden Awakened Wakatoshi Ushijima" then
+        return "Gold Awakened Wakatoshi Ushijima"
+    elseif name == "Diamond Awakened Tobio Kageyama" then
+        return "Dia Awakened Tobio Kageyama"
+    elseif name == "Diamond Awakened Kiyoomi Sakusa" then
+        return "Dia Awakened Kiyoomi Sakusa"
+    elseif name == "Diamond Awakened Korai Hoshiumi" then
+        return "Dia Awakened Korai Hoshiumi"
+    elseif name == "Diamond Awakened Wakatoshi Ushijima" then
+        return "Dia Awakened Wakatoshi Ushijima"
+    end
+    
+    return name
+end
+
+-- Function to play alarm sound
+local function playAlarmSound()
+    pcall(function()
+        -- Create a sound instance
+        local sound = Instance.new("Sound")
+        
+        -- Use the alarm sound from the provided asset ID
+        sound.SoundId = "http://www.roblox.com/asset/?id=5476307813"
+        
+        sound.Volume = 0.7
+        sound.Parent = SoundService
+        
+        -- Wait for the sound to load
+        sound.Loaded:Wait()
+        
+        -- Play the sound
+        sound:Play()
+        
+        -- Clean up after the sound finishes
+        sound.Ended:Connect(function()
+            sound:Destroy()
+        end)
+        
+        -- Safety cleanup in case the sound doesn't end properly
+        delay(10, function()
+            if sound and sound.Parent then
+                sound:Destroy()
+            end
+        end)
+    end)
+end
+
+local characterData = {}
+local characterFrames = {}
+
+-- Initialize character data
+for _, name in ipairs(characterNames) do
+    characterData[name] = {
+        enabled = true,
+        currentCount = 0,
+        totalCount = 0,
+        lastPresentTime = nil,
+        status = "never"
+    }
+end
+
+-- Create UI elements for characters
+local function initializeUI()
+    -- Create checkboxes for each character in characters panel
+    for i, name in ipairs(characterNames) do
+        local checkboxFrame = Instance.new("Frame")
+        checkboxFrame.Name = name .. "Checkbox"
+        checkboxFrame.Size = UDim2.new(1, -20, 0, 20)
+        checkboxFrame.Position = UDim2.new(0, 10, 0, 5 + (i-1)*25)
+        checkboxFrame.BackgroundTransparency = 1
+        checkboxFrame.Parent = charactersScrolling
+        
+        local checkbox = Instance.new("TextButton")
+        checkbox.Name = "Checkbox"
+        checkbox.Size = UDim2.new(0, 15, 0, 15)
+        checkbox.Position = UDim2.new(0, 0, 0.5, -7.5)
+        checkbox.BackgroundColor3 = Color3.fromRGB(76, 175, 80) -- Green when checked
+        checkbox.Text = ""
+        checkbox.Parent = checkboxFrame
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Name = "NameLabel"
+        nameLabel.Size = UDim2.new(1, -25, 1, 0)
+        nameLabel.Position = UDim2.new(0, 20, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = shortenName(name)
+        nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        nameLabel.Font = Enum.Font.Gotham
+        nameLabel.TextSize = 11
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLabel.Parent = checkboxFrame
+        
+        -- Create tracking row
+        local rowFrame = Instance.new("Frame")
+        rowFrame.Name = name .. "Row"
+        rowFrame.Size = UDim2.new(1, -10, 0, 25)
+        rowFrame.Position = UDim2.new(0, 5, 0, 5 + (i-1)*28)
+        rowFrame.BackgroundColor3 = Color3.fromRGB(31, 64, 104)
+        rowFrame.Parent = trackingScrolling
+        
+        local rowName = Instance.new("TextLabel")
+        rowName.Name = "RowName"
+        rowName.Size = UDim2.new(0.45, 0, 1, 0)
+        rowName.Position = UDim2.new(0, 5, 0, 0)
+        rowName.BackgroundTransparency = 1
+        rowName.Text = shortenName(name)
+        rowName.TextColor3 = Color3.fromRGB(255, 255, 255)
+        rowName.Font = Enum.Font.Gotham
+        rowName.TextSize = 11
+        rowName.TextXAlignment = Enum.TextXAlignment.Left
+        rowName.TextTruncate = Enum.TextTruncate.AtEnd
+        rowName.Parent = rowFrame
+        
+        local statusIndicator = Instance.new("Frame")
+        statusIndicator.Name = "StatusIndicator"
+        statusIndicator.Size = UDim2.new(0, 10, 0, 10)
+        statusIndicator.Position = UDim2.new(0.45, 5, 0.5, -5)
+        statusIndicator.BackgroundColor3 = Color3.fromRGB(158, 158, 158)
+        statusIndicator.Parent = rowFrame
+        
+        local statusLabel = Instance.new("TextLabel")
+        statusLabel.Name = "StatusLabel"
+        statusLabel.Size = UDim2.new(0.2, -15, 1, 0)
+        statusLabel.Position = UDim2.new(0.45, 20, 0, 0)
+        statusLabel.BackgroundTransparency = 1
+        statusLabel.Text = "Never seen"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        statusLabel.Font = Enum.Font.Gotham
+        statusLabel.TextSize = 11
+        statusLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        statusLabel.Parent = rowFrame
+        
+        local countLabel = Instance.new("TextLabel")
+        countLabel.Name = "CountLabel"
+        countLabel.Size = UDim2.new(0.15, 0, 1, 0)
+        countLabel.Position = UDim2.new(0.65, 0, 0, 0)
+        countLabel.BackgroundTransparency = 1
+        countLabel.Text = "0"
+        countLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        countLabel.Font = Enum.Font.Gotham
+        countLabel.TextSize = 11
+        countLabel.Parent = rowFrame
+        
+        local timeLabel = Instance.new("TextLabel")
+        timeLabel.Name = "TimeLabel"
+        timeLabel.Size = UDim2.new(0.2, 0, 1, 0)
+        timeLabel.Position = UDim2.new(0.8, 0, 0, 0)
+        timeLabel.BackgroundTransparency = 1
+        timeLabel.Text = "-"
+        timeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        timeLabel.Font = Enum.Font.Gotham
+        timeLabel.TextSize = 11
+        timeLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        timeLabel.Parent = rowFrame
+        
+        -- Store references
+        characterFrames[name] = {
+            checkbox = checkbox,
+            row = rowFrame,
+            statusIndicator = statusIndicator,
+            statusLabel = statusLabel,
+            countLabel = countLabel,
+            timeLabel = timeLabel,
+            checkboxFrame = checkboxFrame
+        }
+        
+        -- Add click event to checkbox
+        checkbox.MouseButton1Click:Connect(function()
+            characterData[name].enabled = not characterData[name].enabled
+            
+            -- Change checkbox color based on state
+            if characterData[name].enabled then
+                checkbox.BackgroundColor3 = Color3.fromRGB(76, 175, 80) -- Green when checked
+            else
+                checkbox.BackgroundColor3 = Color3.fromRGB(158, 158, 158) -- Gray when unchecked
+            end
+            
+            rowFrame.Visible = characterData[name].enabled
+            updateSearchResults() -- Update search results when toggling checkboxes
+        end)
+    end
+    
+    -- Update scrolling frame sizes
+    charactersScrolling.CanvasSize = UDim2.new(0, 0, 0, #characterNames * 25)
+    trackingScrolling.CanvasSize = UDim2.new(0, 0, 0, #characterNames * 28)
+end
+
+-- Update UI with current data
+local function updateUI()
+    local now = tick()
+    lastUpdate.Text = "Last updated: " .. os.date("%X")
+    
+    for _, name in ipairs(characterNames) do
+        local data = characterData[name]
+        local frames = characterFrames[name]
+        
+        if not data.enabled then
+            frames.row.Visible = false
+        else
+            frames.row.Visible = true
+            
+            if data.status == "present" then
+                frames.statusIndicator.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
+                frames.statusLabel.Text = "Present"
+                frames.countLabel.Text = tostring(data.currentCount)
+                frames.timeLabel.Text = "Now"
+            elseif data.status == "absent" then
+                frames.statusIndicator.BackgroundColor3 = Color3.fromRGB(244, 67, 54)
+                frames.statusLabel.Text = "Absent"
+                frames.countLabel.Text = tostring(data.totalCount)
+                
+                if data.lastPresentTime then
+                    local elapsed = math.floor(now - data.lastPresentTime)
+                    local minutes = math.floor(elapsed / 60)
+                    local seconds = elapsed % 60
+                    frames.timeLabel.Text = string.format("%dm %ds", minutes, seconds)
+                else
+                    frames.timeLabel.Text = "-"
+                end
+            else
+                frames.statusIndicator.BackgroundColor3 = Color3.fromRGB(158, 158, 158)
+                frames.statusLabel.Text = "Never seen"
+                frames.countLabel.Text = "0"
+                frames.timeLabel.Text = "-"
+            end
+        end
+    end
+end
+
+-- Search functionality - Fixed to properly stack items
+local function updateSearchResults()
+    local searchText = string.lower(searchBox.Text)
+    
+    -- Track visible items for proper positioning
+    local visibleCheckboxCount = 0
+    local visibleRowCount = 0
+    
+    for _, name in ipairs(characterNames) do
+        local frames = characterFrames[name]
+        local isMatch = searchText == "" or 
+                       string.find(string.lower(name), searchText, 1, true) or 
+                       string.find(string.lower(shortenName(name)), searchText, 1, true)
+        
+        if isMatch then
+            -- Update checkbox position
+            frames.checkboxFrame.Visible = true
+            frames.checkboxFrame.Position = UDim2.new(0, 10, 0, 5 + visibleCheckboxCount * 25)
+            visibleCheckboxCount = visibleCheckboxCount + 1
+            
+            -- Update row position if enabled
+            if characterData[name].enabled then
+                frames.row.Visible = true
+                frames.row.Position = UDim2.new(0, 5, 0, 5 + visibleRowCount * 28)
+                visibleRowCount = visibleRowCount + 1
+            else
+                frames.row.Visible = false
+            end
+        else
+            frames.checkboxFrame.Visible = false
+            frames.row.Visible = false
+        end
+    end
+    
+    -- Update scrolling frame canvas sizes based on visible items
+    charactersScrolling.CanvasSize = UDim2.new(0, 0, 0, visibleCheckboxCount * 25)
+    trackingScrolling.CanvasSize = UDim2.new(0, 0, 0, visibleRowCount * 28)
+end
+
+-- Connect search box to update function
+searchBox:GetPropertyChangedSignal("Text"):Connect(updateSearchResults)
+
+-- Make the UI draggable
+local function makeDraggable(frame, handle)
+    local dragging = false
+    local dragInput, dragStart, startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+end
+
+-- Initialize the UI
+initializeUI()
+
+-- Make the UI draggable by its header
+makeDraggable(mainFrame, header)
+
+-- Character tracking logic
+local seenInstances = {}
+local lastAnyPresentTime = {}
+local previousCounts = {}
+
+for _, name in ipairs(characterNames) do
+    seenInstances[name] = {}
+    lastAnyPresentTime[name] = nil
+    previousCounts[name] = 0
+end
+
+-- Use a more efficient method to find characters
+local function getCurrentCharacters()
+    local charsFound = {}
+    for _, name in ipairs(characterNames) do
+        charsFound[name] = {}
+        
+        -- Find all instances of this character name
+        local children = workspace:GetChildren()
+        for _, child in ipairs(children) do
+            if child.Name == name and child:IsA("Model") then
+                table.insert(charsFound[name], child)
+            end
+        end
+    end
+    return charsFound
+end
+
+-- Update loop with optimized approach
+local lastUpdateTime = 0
+local updateInterval = 0.5 -- Update twice per second instead of every frame
+
+local function updateLoop()
+    local currentTime = tick()
+    if currentTime - lastUpdateTime < updateInterval then
+        return
+    end
+    lastUpdateTime = currentTime
+    
+    local currentChars = getCurrentCharacters()
+
+    for _, name in ipairs(characterNames) do
+        local instances = currentChars[name] or {}
+        local anyPresent = #instances > 0
+        local currentCount = #instances
+
+        -- Check if a new instance has appeared and if the character is enabled
+        if currentCount > previousCounts[name] and characterData[name].enabled then
+            playAlarmSound() -- Play the alarm sound
+        end
+        
+        previousCounts[name] = currentCount
+
+        for _, inst in ipairs(instances) do
+            if not seenInstances[name][inst] then
+                seenInstances[name][inst] = true
+                lastAnyPresentTime[name] = tick()
+                characterData[name].totalCount = characterData[name].totalCount + 1
+            end
+        end
+
+        if anyPresent then
+            lastAnyPresentTime[name] = tick()
+            characterData[name].currentCount = currentCount
+            characterData[name].status = "present"
+            characterData[name].lastPresentTime = tick()
+        else
+            if lastAnyPresentTime[name] then
+                characterData[name].currentCount = 0
+                characterData[name].status = "absent"
+            else
+                characterData[name].status = "never"
+            end
+        end
+    end
+    
+    updateUI()
+end
+
+-- Use Heartbeat instead of RenderStepped for better performance
+RunService.Heartbeat:Connect(updateLoop)
