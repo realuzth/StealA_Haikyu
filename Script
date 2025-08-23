@@ -33,17 +33,97 @@ local characterNames = {
     "Awakened Kiyoomi Sakusa",
     "Awakened Korai Hoshiumi",
     "Awakened Wakatoshi Ushijima",
+    "Shinsuke Kita",
+    "Tobio Kageyama",
+    "Korai Hoshiumi",
+    "Wakatoshi Ushijima",
+    "Kiyoomi Sakusa",
+    "Keiji Akaashi",
+    "Takanobu Aone",
+    "Tetsuro Kuroo",
+    "Alt Art MSBY Atsumu",
+    "Kotaro Bokuto",
+    "Oikawa",
+    "Koshi Sugawara",
+    "Kenma Kozume",
+    "Yaku Morisuke",
+    "Yamaguchi",
+    "Satori Tendo",
+    "Daichi Sawamura",
+    "Rintaro Suna",
+    "Atsumu Miya",
+    "Kei Tsukishima",
+    "Shoyo Hinata",
+    "Hajime Iwaizumi",
+    "Kentaro Kyotani",
+    "Yuu Nishinoya",
+    "Taketora Yamamoto",
+    "Lev Haiba",
+    "Komori Motoya",
     "Golden Timeskip Hinata",
     "Golden Awakened Tobio Kageyama",
     "Golden Awakened Kiyoomi Sakusa",
     "Golden Awakened Korai Hoshiumi",
     "Golden Awakened Wakatoshi Ushijima",
+    "Golden Shinsuke Kita",
+    "Golden Tobio Kageyama",
+    "Golden Korai Hoshiumi",
+    "Golden Wakatoshi Ushijima",
+    "Golden Kiyoomi Sakusa",
+    "Golden Keiji Akaashi",
+    "Golden Takanobu Aone",
+    "Golden Tetsuro Kuroo",
+    "Golden Alt Art MSBY Atsumu",
+    "Golden Kotaro Bokuto",
+    "Golden Oikawa",
+    "Golden Koshi Sugawara",
+    "Golden Kenma Kozume",
+    "Golden Yaku Morisuke",
+    "Golden Yamaguchi",
+    "Golden Satori Tendo",
+    "Golden Daichi Sawamura",
+    "Golden Rintaro Suna",
+    "Golden Atsumu Miya",
+    "Golden Kei Tsukishima",
+    "Golden Shoyo Hinata",
+    "Golden Hajime Iwaizumi",
+    "Golden Kentaro Kyotani",
+    "Golden Yuu Nishinoya",
+    "Golden Taketora Yamamoto",
+    "Golden Lev Haiba",
+    "Golden Komori Motoya",
     "Diamond Timeskip Hinata",
     "Diamond Awakened Tobio Kageyama",
     "Diamond Awakened Kiyoomi Sakusa",
     "Diamond Awakened Korai Hoshiumi",
     "Diamond Awakened Wakatoshi Ushijima",
-    "Diamond Shinsuke Kita"
+    "Diamond Shinsuke Kita",
+    "Diamond Tobio Kageyama",
+    "Diamond Korai Hoshiumi",
+    "Diamond Wakatoshi Ushijima",
+    "Diamond Kiyoomi Sakusa",
+    "Diamond Keiji Akaashi",
+    "Diamond Takanobu Aone",
+    "Diamond Tetsuro Kuroo",
+    "Diamond Alt Art MSBY Atsumu",
+    "Diamond Kotaro Bokuto",
+    "Diamond Oikawa",
+    "Diamond Koshi Sugawara",
+    "Diamond Kenma Kozume",
+    "Diamond Yaku Morisuke",
+    "Diamond Yamaguchi",
+    "Diamond Satori Tendo",
+    "Diamond Daichi Sawamura",
+    "Diamond Rintaro Suna",
+    "Diamond Atsumu Miya",
+    "Diamond Kei Tsukishima",
+    "Diamond Shoyo Hinata",
+    "Diamond Hajime Iwaizumi",
+    "Diamond Kentaro Kyotani",
+    "Diamond Yuu Nishinoya",
+    "Diamond Taketora Yamamoto",
+    "Diamond Lev Haiba",
+    "Diamond Komori Motoya"
 }
 
 -- Function to shorten display names
@@ -70,6 +150,12 @@ local function shortenName(name)
         return "Dia Awakened Korai Hoshiumi"
     elseif name == "Diamond Awakened Wakatoshi Ushijima" then
         return "Dia Awakened Wakatoshi Ushijima"
+    elseif name == "Alt Art MSBY Atsumu" then
+        return "Alt Art Atsumu"
+    elseif name == "Golden Alt Art MSBY Atsumu" then
+        return "Gold Alt Art Atsumu"
+    elseif name == "Diamond Alt Art MSBY Atsumu" then
+        return "Dia Alt Art Atsumu"
     end
     
     return name
@@ -128,26 +214,71 @@ local function loadCharacterStates()
     local savePath = getSavePath()
     local defaultStates = {}
     
+    -- Set default states - only the specified characters are true by default
+    local defaultTrueCharacters = {
+        "Timeskip Hinata",
+        "Awakened Tobio Kageyama",
+        "Awakened Kiyoomi Sakusa",
+        "Awakened Korai Hoshiumi",
+        "Awakened Wakatoshi Ushijima",
+        "Golden Timeskip Hinata",
+        "Golden Awakened Tobio Kageyama",
+        "Golden Awakened Kiyoomi Sakusa",
+        "Golden Awakened Korai Hoshiumi",
+        "Golden Awakened Wakatoshi Ushijima",
+        "Diamond Timeskip Hinata",
+        "Diamond Awakened Tobio Kageyama",
+        "Diamond Awakened Kiyoomi Sakusa",
+        "Diamond Awakened Korai Hoshiumi",
+        "Diamond Awakened Wakatoshi Ushijima"
+    }
+    
+    -- Set all characters to false by default
     for _, name in ipairs(characterNames) do
+        defaultStates[name] = false
+    end
+    
+    -- Set the specified characters to true
+    for _, name in ipairs(defaultTrueCharacters) do
         defaultStates[name] = true
     end
     
-    -- Try to read the file
-    local success, fileContents = pcall(function()
-        return readfile(savePath)
+    -- Check if file exists before trying to read it
+    local fileExists = pcall(function()
+        if readfile and isfile then
+            return isfile(savePath)
+        end
+        return false
     end)
     
-    if success and fileContents then
-        -- Try to parse the JSON
-        local success2, parsedData = pcall(function()
-            return game:GetService("HttpService"):JSONDecode(fileContents)
+    if fileExists then
+        -- Try to read the file
+        local success, fileContents = pcall(function()
+            return readfile(savePath)
         end)
         
-        if success2 and parsedData then
-            print("Loaded character states from file")
-            return parsedData
+        if success and fileContents then
+            -- Try to parse the JSON
+            local success2, parsedData = pcall(function()
+                return game:GetService("HttpService"):JSONDecode(fileContents)
+            end)
+            
+            if success2 and parsedData then
+                print("Loaded character states from file")
+                
+                -- Merge with defaults for any missing characters
+                for _, name in ipairs(characterNames) do
+                    if parsedData[name] == nil then
+                        parsedData[name] = defaultStates[name]
+                    end
+                end
+                
+                return parsedData
+            else
+                print("Failed to parse saved character states, using defaults")
+            end
         else
-            print("Failed to parse saved character states, using defaults")
+            print("Failed to read saved character states, using defaults")
         end
     else
         print("No saved character states found, using defaults")
@@ -189,7 +320,7 @@ local characterFrames = {}
 
 for _, name in ipairs(characterNames) do
     characterData[name] = {
-        enabled = savedStates[name] ~= nil and savedStates[name] or true,
+        enabled = savedStates[name] ~= nil and savedStates[name] or false,
         currentCount = 0,
         totalCount = 0,
         lastPresentTime = nil,
@@ -469,6 +600,30 @@ targetStatus.TextSize = 12
 targetStatus.TextXAlignment = Enum.TextXAlignment.Right
 targetStatus.Parent = footer
 
+-- Loading indicator
+local loadingFrame = Instance.new("Frame")
+loadingFrame.Name = "LoadingFrame"
+loadingFrame.Size = UDim2.new(1, 0, 1, 0)
+loadingFrame.Position = UDim2.new(0, 0, 0, 0)
+loadingFrame.BackgroundColor3 = Color3.fromRGB(22, 36, 71)
+loadingFrame.BorderSizePixel = 0
+loadingFrame.ZIndex = 10
+loadingFrame.Parent = mainFrame
+
+local loadingText = Instance.new("TextLabel")
+loadingText.Name = "LoadingText"
+loadingText.Size = UDim2.new(1, 0, 0, 30)
+loadingText.Position = UDim2.new(0, 0, 0.5, -15)
+loadingText.BackgroundTransparency = 1
+loadingText.Text = "Loading character data..."
+loadingText.TextColor3 = Color3.fromRGB(255, 255, 255)
+loadingText.Font = Enum.Font.GothamBold
+loadingText.TextSize = 16
+loadingText.Parent = loadingFrame
+
+-- Script loaded flag
+local scriptLoaded = false
+
 -- Create UI elements for characters
 local function initializeUI()
     -- Create checkboxes for each character in characters panel
@@ -603,10 +758,17 @@ local function initializeUI()
     -- Update scrolling frame sizes
     charactersScrolling.CanvasSize = UDim2.new(0, 0, 0, #characterNames * 25)
     trackingScrolling.CanvasSize = UDim2.new(0, 0, 0, #characterNames * 28)
+    
+    -- Remove loading screen and set script as loaded
+    loadingFrame:Destroy()
+    scriptLoaded = true
+    print("Script loaded successfully!")
 end
 
 -- Update UI with current data
 local function updateUI()
+    if not scriptLoaded then return end
+    
     local now = tick()
     lastUpdate.Text = "Last updated: " .. os.date("%X")
     
@@ -649,6 +811,8 @@ end
 
 -- Update session time display
 local function updateSessionTime()
+    if not scriptLoaded then return end
+    
     local elapsed = os.time() - joinTime
     local minutes = math.floor(elapsed / 60)
     local seconds = elapsed % 60
@@ -657,6 +821,8 @@ end
 
 -- Search functionality - Fixed to properly stack items
 local function updateSearchResults()
+    if not scriptLoaded then return end
+    
     local searchText = string.lower(searchBox.Text)
     
     -- Track visible items for proper positioning
@@ -734,8 +900,8 @@ local function makeDraggable(frame, handle)
     end)
 end
 
--- Initialize the UI
-initializeUI()
+-- Initialize the UI after a short delay to ensure everything is loaded
+delay(0.1, initializeUI)
 
 -- Make the UI draggable by its header
 makeDraggable(mainFrame, header)
@@ -770,6 +936,8 @@ end
 
 -- Auto-buy functions
 local function findClosestTarget()
+    if not scriptLoaded then return nil, math.huge end
+    
     local closestTarget = nil
     local closestDistance = math.huge
     
@@ -810,7 +978,7 @@ end
 
 -- Improved follow function with continuous movement
 local function followAndPurchase(target)
-    if not target or not humanoid or humanoid.Health <= 0 or isPurchasing then return false end
+    if not scriptLoaded or not target or not humanoid or humanoid.Health <= 0 or isPurchasing then return false end
     
     autoBuyStatus.Text = "Auto-Buy: Following"
     targetStatus.Text = "Target: " .. shortenName(target.Name)
@@ -890,6 +1058,11 @@ end
 -- Main auto-buy function with improved target prioritization
 local function autoBuyLoop()
     while autoBuyEnabled do
+        if not scriptLoaded then
+            wait(1)
+            continue
+        end
+        
         -- Find the closest target
         local target, distance = findClosestTarget()
         
@@ -921,6 +1094,8 @@ end
 
 -- Toggle function for auto-buy
 local function toggleAutoBuy()
+    if not scriptLoaded then return end
+    
     autoBuyEnabled = not autoBuyEnabled
     
     if autoBuyEnabled then
@@ -956,6 +1131,8 @@ local lastUpdateTime = 0
 local updateInterval = 0.5 -- Update twice per second instead of every frame
 
 local function updateLoop()
+    if not scriptLoaded then return end
+    
     local currentTime = tick()
     if currentTime - lastUpdateTime < updateInterval then
         return
@@ -1019,6 +1196,11 @@ local function checkForJsonUpdates()
     while true do
         wait(jsonCheckInterval)
         
+        if not scriptLoaded then
+            wait(1)
+            continue
+        end
+        
         -- Reload the JSON file to check for external changes
         local newStates = loadCharacterStates()
         
@@ -1042,4 +1224,4 @@ end
 -- Start the JSON update checker
 spawn(checkForJsonUpdates)
 
-print("Enhanced character tracker with real-time JSON updates loaded successfully!")
+print("Enhanced character tracker with real-time JSON updates loading...")
