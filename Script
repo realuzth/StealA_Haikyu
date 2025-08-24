@@ -1,132 +1,134 @@
--- Haikyuu Character Tracker Pro v3.3 (Enhanced Auto-Buy)
-    -- Auto-buy triggers for selected character spawns + immediate stop on unselect
-    
-    repeat task.wait() until game:IsLoaded()
-    
-    local Services = {
-        Players = game:GetService("Players"),
-        RunService = game:GetService("RunService"),
-        UserInputService = game:GetService("UserInputService"),
-        SoundService = game:GetService("SoundService"),
-        VirtualInputManager = game:GetService("VirtualInputManager"),
-        HttpService = game:GetService("HttpService"),
-        TweenService = game:GetService("TweenService")
-    }
-    
-    local player = Services.Players.LocalPlayer
-    repeat task.wait() until player and player.PlayerGui
-    local playerGui = player.PlayerGui
-    repeat task.wait() until player.Character and player.Character:FindFirstChild("Humanoid") and player.Character:FindFirstChild("HumanoidRootPart")
-    
-    local character = player.Character
-    local humanoid = character:FindFirstChild("Humanoid")
-    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-    
-    local CONFIG = {
-        UPDATE_INTERVAL = 0.15,
-        SAVE_INTERVAL = 3,
-        PERFORMANCE_THRESHOLD = 16.67,
-        AUTO_BUY_DISTANCE = 10,
-        PURCHASE_DURATION = 2.5,
-        MAX_FOLLOW_TIME = 60,
-        ALARM_SOUND_ID = "rbxassetid://5476307813",
-        SOUND_VOLUME = 0.8,
-        ANIMATION_SPEED = 0.2,
-        UI_SCALE = 1.0,
-        -- NEW: Auto-buy trigger settings
-        AUTO_TRIGGER_ON_SPAWN = true,  -- Enable auto-trigger on spawn
-        AUTO_TRIGGER_PRIORITY_THRESHOLD = 2  -- Only auto-trigger for tier 2 and above (Secret, Awakened)
-    }
-    
-    local RARITY_COLORS = {
-        Secret = Color3.fromRGB(255, 224, 102),
-        Awakened = Color3.fromRGB(255, 102, 255),
-        Mythic = Color3.fromRGB(255, 102, 102),
-        Legendary = Color3.fromRGB(255, 204, 102),
-        Rare = Color3.fromRGB(102, 178, 255),
-        Uncommon = Color3.fromRGB(102, 255, 178),
-        Common = Color3.fromRGB(224, 224, 224)
-    }
-    local MUTATION_COLORS = {
-        Golden = Color3.fromRGB(255, 215, 0),
-        Diamond = Color3.fromRGB(185, 242, 255)
-    }
-    
-    local GameState = {
-        scriptActive = false,
-        joinTime = os.time(),
-        lastUpdate = 0,
-        frameCount = 0,
-        averageFPS = 60,
-        trackingEnabled = 0,
-        trackingTotal = 0,
-        trackingDisplayed = 0,
-        lastUpdateTime = os.time()
-    }
-    
-    local CHARACTER_DATABASE = {
-        ["Timeskip Hinata"] = {rarity = "Secret", tier = 1, baseChar = "Hinata"},
-        ["Awakened Tobio Kageyama"] = {rarity = "Awakened", tier = 2, baseChar = "Kageyama"},
-        ["Awakened Kiyoomi Sakusa"] = {rarity = "Awakened", tier = 2, baseChar = "Sakusa"},
-        ["Awakened Korai Hoshiumi"] = {rarity = "Awakened", tier = 2, baseChar = "Hoshiumi"},
-        ["Awakened Wakatoshi Ushijima"] = {rarity = "Awakened", tier = 2, baseChar = "Ushijima"},
-        ["Shinsuke Kita"] = {rarity = "Mythic", tier = 3, baseChar = "Kita"},
-        ["Tobio Kageyama"] = {rarity = "Mythic", tier = 3, baseChar = "Kageyama"},
-        ["Korai Hoshiumi"] = {rarity = "Mythic", tier = 3, baseChar = "Hoshiumi"},
-        ["Wakatoshi Ushijima"] = {rarity = "Mythic", tier = 3, baseChar = "Ushijima"},
-        ["Kiyoomi Sakusa"] = {rarity = "Mythic", tier = 3, baseChar = "Sakusa"},
-        ["Keiji Akaashi"] = {rarity = "Legendary", tier = 4, baseChar = "Akaashi"},
-        ["Takanobu Aone"] = {rarity = "Legendary", tier = 4, baseChar = "Aone"},
-        ["Tetsuro Kuroo"] = {rarity = "Legendary", tier = 4, baseChar = "Kuroo"},
-        ["Alt Art MSBY Atsumu"] = {rarity = "Legendary", tier = 4, baseChar = "Atsumu"},
-        ["Kotaro Bokuto"] = {rarity = "Legendary", tier = 4, baseChar = "Bokuto"},
-        ["Oikawa"] = {rarity = "Legendary", tier = 4, baseChar = "Oikawa"},
-        ["Koshi Sugawara"] = {rarity = "Rare", tier = 5, baseChar = "Sugawara"},
-        ["Kenma Kozume"] = {rarity = "Rare", tier = 5, baseChar = "Kenma"},
-        ["Yaku Morisuke"] = {rarity = "Rare", tier = 5, baseChar = "Yaku"},
-        ["Yamaguchi"] = {rarity = "Rare", tier = 5, baseChar = "Yamaguchi"},
-        ["Satori Tendo"] = {rarity = "Rare", tier = 5, baseChar = "Tendo"},
-        ["Daichi Sawamura"] = {rarity = "Rare", tier = 5, baseChar = "Daichi"},
-        ["Rintaro Suna"] = {rarity = "Uncommon", tier = 6, baseChar = "Suna"},
-        ["Atsumu Miya"] = {rarity = "Uncommon", tier = 6, baseChar = "Atsumu"},
-        ["Kei Tsukishima"] = {rarity = "Uncommon", tier = 6, baseChar = "Tsukishima"},
-        ["Shoyo Hinata"] = {rarity = "Uncommon", tier = 6, baseChar = "Hinata"},
-        ["Hajime Iwaizumi"] = {rarity = "Uncommon", tier = 6, baseChar = "Iwaizumi"},
-        ["Kentaro Kyotani"] = {rarity = "Uncommon", tier = 6, baseChar = "Kyotani"},
-        ["Yuu Nishinoya"] = {rarity = "Common", tier = 7, baseChar = "Nishinoya"},
-        ["Taketora Yamamoto"] = {rarity = "Common", tier = 7, baseChar = "Yamamoto"},
-        ["Lev Haiba"] = {rarity = "Common", tier = 7, baseChar = "Lev"},
-        ["Komori Motoya"] = {rarity = "Common", tier = 7, baseChar = "Komori"}
-    }
-    
-    local DEFAULT_ENABLED_CHARACTERS = {
-        "Timeskip Hinata", "Awakened Tobio Kageyama", "Awakened Kiyoomi Sakusa", 
-        "Awakened Korai Hoshiumi", "Awakened Wakatoshi Ushijima", "Shinsuke Kita",
-        "Tobio Kageyama", "Korai Hoshiumi", "Wakatoshi Ushijima", "Kiyoomi Sakusa",
-        "Keiji Akaashi", "Takanobu Aone", "Tetsuro Kuroo", "Alt Art MSBY Atsumu",
-        "Kotaro Bokuto", "Oikawa"
-    }
-    
-    local function generateMutationVariants()
-        local variants = {}
-        for name, data in pairs(CHARACTER_DATABASE) do
-            variants[name] = {rarity = data.rarity, tier = data.tier, baseChar = data.baseChar, mutation = nil, multiplier = 1.0, fullName = name}
-        end
-        for name, data in pairs(CHARACTER_DATABASE) do
-            local goldenName = "Golden " .. name
-            variants[goldenName] = {rarity = data.rarity, tier = data.tier, baseChar = data.baseChar, mutation = "Golden", multiplier = 2.0, fullName = goldenName}
-        end
-        for name, data in pairs(CHARACTER_DATABASE) do
-            local diamondName = "Diamond " .. name
-            variants[diamondName] = {rarity = data.rarity, tier = data.tier, baseChar = data.baseChar, mutation = "Diamond", multiplier = 5.0, fullName = diamondName}
-        end
-        return variants
+-- Volleyball Vision v1.0
+-- Enhanced character tracking and auto-purchase system for Haikyuu-style games
+-- Created by uzth
+
+local SCRIPT_NAME = "Volleyball Vision"
+local SCRIPT_VERSION = "made by uzth"
+
+repeat task.wait() until game:IsLoaded()
+
+local Services = {
+    Players = game:GetService("Players"),
+    RunService = game:GetService("RunService"),
+    UserInputService = game:GetService("UserInputService"),
+    SoundService = game:GetService("SoundService"),
+    VirtualInputManager = game:GetService("VirtualInputManager"),
+    HttpService = game:GetService("HttpService"),
+    TweenService = game:GetService("TweenService")
+}
+
+local player = Services.Players.LocalPlayer
+repeat task.wait() until player and player.PlayerGui
+local playerGui = player.PlayerGui
+repeat task.wait() until player.Character and player.Character:FindFirstChild("Humanoid") and player.Character:FindFirstChild("HumanoidRootPart")
+
+local character = player.Character
+local humanoid = character:FindFirstChild("Humanoid")
+local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+
+local CONFIG = {
+    UPDATE_INTERVAL = 0.15,
+    SAVE_INTERVAL = 3,
+    PERFORMANCE_THRESHOLD = 16.67,
+    AUTO_BUY_DISTANCE = 10,
+    PURCHASE_DURATION = 2.5,
+    MAX_FOLLOW_TIME = 60,
+    ALARM_SOUND_ID = "rbxassetid://5476307813",
+    SOUND_VOLUME = 0.8,
+    ANIMATION_SPEED = 0.2,
+    UI_SCALE = 1.0,
+    AUTO_TRIGGER_ON_SPAWN = true,
+    AUTO_TRIGGER_PRIORITY_THRESHOLD = 2
+}
+
+local RARITY_COLORS = {
+    Secret = Color3.fromRGB(255, 224, 102),
+    Awakened = Color3.fromRGB(255, 102, 255),
+    Mythic = Color3.fromRGB(255, 102, 102),
+    Legendary = Color3.fromRGB(255, 204, 102),
+    Rare = Color3.fromRGB(102, 178, 255),
+    Uncommon = Color3.fromRGB(102, 255, 178),
+    Common = Color3.fromRGB(224, 224, 224)
+}
+local MUTATION_COLORS = {
+    Golden = Color3.fromRGB(255, 215, 0),
+    Diamond = Color3.fromRGB(185, 242, 255)
+}
+
+local GameState = {
+    scriptActive = false,
+    joinTime = os.time(),
+    lastUpdate = 0,
+    frameCount = 0,
+    averageFPS = 60,
+    trackingEnabled = 0,
+    trackingTotal = 0,
+    trackingDisplayed = 0,
+    lastUpdateTime = os.time()
+}
+
+local CHARACTER_DATABASE = {
+    ["Timeskip Hinata"] = {rarity = "Secret", tier = 1, baseChar = "Hinata"},
+    ["Awakened Tobio Kageyama"] = {rarity = "Awakened", tier = 2, baseChar = "Kageyama"},
+    ["Awakened Kiyoomi Sakusa"] = {rarity = "Awakened", tier = 2, baseChar = "Sakusa"},
+    ["Awakened Korai Hoshiumi"] = {rarity = "Awakened", tier = 2, baseChar = "Hoshiumi"},
+    ["Awakened Wakatoshi Ushijima"] = {rarity = "Awakened", tier = 2, baseChar = "Ushijima"},
+    ["Shinsuke Kita"] = {rarity = "Mythic", tier = 3, baseChar = "Kita"},
+    ["Tobio Kageyama"] = {rarity = "Mythic", tier = 3, baseChar = "Kageyama"},
+    ["Korai Hoshiumi"] = {rarity = "Mythic", tier = 3, baseChar = "Hoshiumi"},
+    ["Wakatoshi Ushijima"] = {rarity = "Mythic", tier = 3, baseChar = "Ushijima"},
+    ["Kiyoomi Sakusa"] = {rarity = "Mythic", tier = 3, baseChar = "Sakusa"},
+    ["Keiji Akaashi"] = {rarity = "Legendary", tier = 4, baseChar = "Akaashi"},
+    ["Takanobu Aone"] = {rarity = "Legendary", tier = 4, baseChar = "Aone"},
+    ["Tetsuro Kuroo"] = {rarity = "Legendary", tier = 4, baseChar = "Kuroo"},
+    ["Alt Art MSBY Atsumu"] = {rarity = "Legendary", tier = 4, baseChar = "Atsumu"},
+    ["Kotaro Bokuto"] = {rarity = "Legendary", tier = 4, baseChar = "Bokuto"},
+    ["Oikawa"] = {rarity = "Legendary", tier = 4, baseChar = "Oikawa"},
+    ["Koshi Sugawara"] = {rarity = "Rare", tier = 5, baseChar = "Sugawara"},
+    ["Kenma Kozume"] = {rarity = "Rare", tier = 5, baseChar = "Kenma"},
+    ["Yaku Morisuke"] = {rarity = "Rare", tier = 5, baseChar = "Yaku"},
+    ["Yamaguchi"] = {rarity = "Rare", tier = 5, baseChar = "Yamaguchi"},
+    ["Satori Tendo"] = {rarity = "Rare", tier = 5, baseChar = "Tendo"},
+    ["Daichi Sawamura"] = {rarity = "Rare", tier = 5, baseChar = "Daichi"},
+    ["Rintaro Suna"] = {rarity = "Uncommon", tier = 6, baseChar = "Suna"},
+    ["Atsumu Miya"] = {rarity = "Uncommon", tier = 6, baseChar = "Atsumu"},
+    ["Kei Tsukishima"] = {rarity = "Uncommon", tier = 6, baseChar = "Tsukishima"},
+    ["Shoyo Hinata"] = {rarity = "Uncommon", tier = 6, baseChar = "Hinata"},
+    ["Hajime Iwaizumi"] = {rarity = "Uncommon", tier = 6, baseChar = "Iwaizumi"},
+    ["Kentaro Kyotani"] = {rarity = "Uncommon", tier = 6, baseChar = "Kyotani"},
+    ["Yuu Nishinoya"] = {rarity = "Common", tier = 7, baseChar = "Nishinoya"},
+    ["Taketora Yamamoto"] = {rarity = "Common", tier = 7, baseChar = "Yamamoto"},
+    ["Lev Haiba"] = {rarity = "Common", tier = 7, baseChar = "Lev"},
+    ["Komori Motoya"] = {rarity = "Common", tier = 7, baseChar = "Komori"}
+}
+
+local DEFAULT_ENABLED_CHARACTERS = {
+    "Timeskip Hinata", "Awakened Tobio Kageyama", "Awakened Kiyoomi Sakusa", 
+    "Awakened Korai Hoshiumi", "Awakened Wakatoshi Ushijima", "Shinsuke Kita",
+    "Tobio Kageyama", "Korai Hoshiumi", "Wakatoshi Ushijima", "Kiyoomi Sakusa",
+    "Keiji Akaashi", "Takanobu Aone", "Tetsuro Kuroo", "Alt Art MSBY Atsumu",
+    "Kotaro Bokuto", "Oikawa"
+}
+
+local function generateMutationVariants()
+    local variants = {}
+    for name, data in pairs(CHARACTER_DATABASE) do
+        variants[name] = {rarity = data.rarity, tier = data.tier, baseChar = data.baseChar, mutation = nil, multiplier = 1.0, fullName = name}
     end
-    
-    local COMPLETE_DATABASE = generateMutationVariants()
-    
+    for name, data in pairs(CHARACTER_DATABASE) do
+        local goldenName = "Golden " .. name
+        variants[goldenName] = {rarity = data.rarity, tier = data.tier, baseChar = data.baseChar, mutation = "Golden", multiplier = 2.0, fullName = goldenName}
+    end
+    for name, data in pairs(CHARACTER_DATABASE) do
+        local diamondName = "Diamond " .. name
+        variants[diamondName] = {rarity = data.rarity, tier = data.tier, baseChar = data.baseChar, mutation = "Diamond", multiplier = 5.0, fullName = diamondName}
+    end
+    return variants
+end
+
+local COMPLETE_DATABASE = generateMutationVariants()
+
 local function getSortedCharacters()
-    -- Predefined order exactly as specified
     local orderedCharacters = {
         "Timeskip Hinata",
         "Awakened Tobio Kageyama",
@@ -226,7 +228,6 @@ local function getSortedCharacters()
         "Diamond Komori Motoya"
     }
     
-    -- Still need to ensure data consistency for any characters in database
     for name, data in pairs(COMPLETE_DATABASE) do
         if not data.tier then
             local tierMap = {Secret = 1, Awakened = 2, Mythic = 3, Legendary = 4, Rare = 5, Uncommon = 6, Common = 7}
@@ -238,7 +239,6 @@ local function getSortedCharacters()
         end
     end
     
-    -- Filter to only include characters that exist in the database
     local finalList = {}
     for _, charName in ipairs(orderedCharacters) do
         if COMPLETE_DATABASE[charName] then
@@ -246,7 +246,6 @@ local function getSortedCharacters()
         end
     end
     
-    -- Add any characters from database that weren't in our predefined list (as fallback)
     for name, _ in pairs(COMPLETE_DATABASE) do
         local found = false
         for _, orderedName in ipairs(orderedCharacters) do
@@ -262,11 +261,10 @@ local function getSortedCharacters()
     
     return finalList
 end
-    
-    local characterNames = getSortedCharacters()
-    local gameData
-    
-    -- Enhanced DataManager with Account-Specific Storage
+
+local characterNames = getSortedCharacters()
+local gameData
+
 local DataManager = {
     cache = {},
     saveQueue = nil,
@@ -277,21 +275,17 @@ local DataManager = {
 }
 
 function DataManager:generateAccountHash()
-    -- Create a unique identifier for the current account
     local userId = tostring(player.UserId)
     local userName = player.Name
     local displayName = player.DisplayName or userName
     
-    -- Create a simple hash using user data
     local hashString = userId .. "_" .. userName .. "_" .. displayName
     
-    -- Create a shorter, filesystem-safe hash
     local hash = ""
     for i = 1, #hashString do
         hash = hash .. string.format("%02x", string.byte(hashString, i))
     end
     
-    -- Truncate to reasonable length and make it readable
     self.accountHash = string.sub(hash, 1, 16)
     self.currentAccount = userName .. "_" .. userId
     
@@ -301,15 +295,15 @@ end
 
 function DataManager:getBasePath()
     local paths = {
-        function() return getexecutordirectory() .. "/HaikyuuTrackerPro" end,
-        function() return getscriptsdirectory() .. "/../HaikyuuTrackerPro" end,
-        function() return "HaikyuuTrackerPro" end
+        function() return getexecutordirectory() .. "/VolleyballVision" end,
+        function() return getscriptsdirectory() .. "/../VolleyballVision" end,
+        function() return "VolleyballVision" end
     }
     for _, pathFunc in ipairs(paths) do
         local success, path = pcall(pathFunc)
         if success and path then return path end
     end
-    return "HaikyuuTrackerPro"
+    return "VolleyballVision"
 end
 
 function DataManager:getAccountPath()
@@ -329,14 +323,13 @@ function DataManager:createDirectories()
     local basePath = self:getBasePath()
     local accountPath = self:getAccountPath()
     
-    -- Create all necessary directories
     local dirs = {
         basePath,
         basePath .. "/accounts",
         accountPath,
         accountPath .. "/backups",
         accountPath .. "/exports",
-        basePath .. "/shared" -- For shared settings if needed in future
+        basePath .. "/shared"
     }
     
     for _, dir in ipairs(dirs) do
@@ -348,7 +341,6 @@ function DataManager:createDirectories()
         end
     end
     
-    -- Create account info file
     self:saveAccountInfo()
 end
 
@@ -361,7 +353,7 @@ function DataManager:saveAccountInfo()
         accountHash = self.accountHash,
         createdAt = os.time(),
         lastAccessed = os.time(),
-        version = "3.3"
+        version = "1.0"
     }
     
     pcall(function()
@@ -373,7 +365,6 @@ end
 function DataManager:updateLastAccessed()
     local accountInfoPath = self:getAccountPath() .. "/account_info.json"
     
-    -- Try to read existing info and update last accessed
     local success, content = pcall(function() return readfile(accountInfoPath) end)
     if success and content then
         local parseSuccess, accountInfo = pcall(function() 
@@ -398,7 +389,7 @@ function DataManager:getDefaultData()
             userName = player.Name,
             displayName = player.DisplayName or player.Name,
             accountHash = self.accountHash,
-            dataVersion = "3.3"
+            dataVersion = "1.0"
         },
         characters = {},
         settings = {
@@ -448,13 +439,10 @@ function DataManager:getDefaultData()
 end
 
 function DataManager:load()
-    -- Generate account hash first
     self:generateAccountHash()
     
-    -- Create directories
     self:createDirectories()
     
-    -- Update last accessed time
     self:updateLastAccessed()
     
     local dataPath = self:getDataPath()
@@ -466,18 +454,15 @@ function DataManager:load()
         end)
         
         if parseSuccess and data then
-            -- Validate account data
             if data.account and data.account.userId == player.UserId then
                 local defaultData = self:getDefaultData()
                 
-                -- Merge with default data to ensure all fields exist
                 for key, value in pairs(defaultData) do
                     if data[key] == nil then
                         data[key] = value
                     end
                 end
                 
-                -- Add missing settings
                 if not data.settings.autoTriggerOnSpawn then
                     data.settings.autoTriggerOnSpawn = true
                 end
@@ -485,7 +470,6 @@ function DataManager:load()
                     data.settings.autoTriggerThreshold = 2
                 end
                 
-                -- Ensure all characters exist
                 for name, charData in pairs(defaultData.characters) do
                     if data.characters[name] == nil then
                         data.characters[name] = charData
@@ -537,27 +521,24 @@ function DataManager:save(data, force)
     spawn(function()
         local dataPath = self:getDataPath()
         local success = pcall(function()
-            -- Ensure account info is up to date in the data
             data.account = data.account or {}
             data.account.userId = player.UserId
             data.account.userName = player.Name
             data.account.displayName = player.DisplayName or player.Name
             data.account.accountHash = self.accountHash
             data.account.lastSaved = os.time()
-            data.account.dataVersion = "3.3"
+            data.account.dataVersion = "1.0"
             
             local jsonData = Services.HttpService:JSONEncode(data)
             writefile(dataPath, jsonData)
             
-            -- Create backup occasionally
-            if math.random(1, 20) == 1 then -- 5% chance
+            if math.random(1, 20) == 1 then
                 local backupPath = self:getAccountPath() .. "/backups/backup_" .. os.time() .. ".json"
                 pcall(function() writefile(backupPath, jsonData) end)
             end
         end)
         
         if success then
-            -- Update last accessed time
             self:updateLastAccessed()
         else
             warn("[DataManager] Failed to save data for account: " .. self.currentAccount)
@@ -565,7 +546,6 @@ function DataManager:save(data, force)
         
         self.saveInProgress = false
         
-        -- Process queued save if any
         if self.saveQueue then
             local queuedData = self.saveQueue
             self.saveQueue = nil
@@ -574,7 +554,6 @@ function DataManager:save(data, force)
     end)
 end
 
--- Export function to get all accounts (useful for account switching UI in future)
 function DataManager:getAllAccounts()
     local basePath = self:getBasePath()
     local accountsPath = basePath .. "/accounts"
@@ -601,7 +580,6 @@ function DataManager:getAllAccounts()
     return accounts
 end
 
--- Utility function to migrate old data (if needed)
 function DataManager:migrateOldData()
     local oldPath = self:getBasePath() .. "/gamedata.json"
     local success, content = pcall(function() return readfile(oldPath) end)
@@ -614,24 +592,20 @@ function DataManager:migrateOldData()
         end)
         
         if parseSuccess and oldData then
-            -- Add account info to old data
             oldData.account = {
                 userId = player.UserId,
                 userName = player.Name,
                 displayName = player.DisplayName or player.Name,
                 accountHash = self.accountHash,
                 migratedAt = os.time(),
-                dataVersion = "3.3"
+                dataVersion = "1.0"
             }
             
-            -- Save as new account-specific data
             self:save(oldData, true)
             
-            -- Rename old file as backup
             pcall(function()
                 local backupPath = self:getBasePath() .. "/gamedata_migrated_" .. os.time() .. ".json"
                 writefile(backupPath, content)
-                -- Note: We don't delete the original file for safety
             end)
             
             print("[DataManager] Migration completed successfully")
@@ -642,13 +616,10 @@ function DataManager:migrateOldData()
     return nil
 end
 
--- Enhanced load function that checks for migration
 local originalLoad = DataManager.load
 function DataManager:load()
-    -- First try to load account-specific data
     local data = originalLoad(self)
     
-    -- If no account-specific data exists, try to migrate old data
     if not data.account or not data.account.userId then
         local migratedData = self:migrateOldData()
         if migratedData then
@@ -658,722 +629,1008 @@ function DataManager:load()
     
     return data
 end
+
+local SoundManager = {
+    enabled = true,
+    sounds = {}
+}
+
+function SoundManager:play(soundId, volume, pitch)
+    if not self.enabled then return end
     
-    -- Sound System
-    local SoundManager = {
-        enabled = true,
-        sounds = {}
-    }
-    
-    function SoundManager:play(soundId, volume, pitch)
-        if not self.enabled then return end
-        
-        spawn(function()
-            pcall(function()
-                local sound = Instance.new("Sound")
-                sound.SoundId = soundId
-                sound.Volume = volume or CONFIG.SOUND_VOLUME
-                sound.PlaybackSpeed = pitch or 1.0
-                sound.Parent = Services.SoundService
-                
-                local loadStart = tick()
-                while not sound.IsLoaded and (tick() - loadStart) < 2 do
-                    task.wait(0.1)
-                end
-                
-                if sound.IsLoaded then
-                    sound:Play()
-                end
-                
-                sound.Ended:Connect(function()
+    spawn(function()
+        pcall(function()
+            local sound = Instance.new("Sound")
+            sound.SoundId = soundId
+            sound.Volume = volume or CONFIG.SOUND_VOLUME
+            sound.PlaybackSpeed = pitch or 1.0
+            sound.Parent = Services.SoundService
+            
+            local loadStart = tick()
+            while not sound.IsLoaded and (tick() - loadStart) < 2 do
+                task.wait(0.1)
+            end
+            
+            if sound.IsLoaded then
+                sound:Play()
+            end
+            
+            sound.Ended:Connect(function()
+                sound:Destroy()
+            end)
+            
+            spawn(function()
+                task.wait(15)
+                if sound and sound.Parent then
                     sound:Destroy()
-                end)
-                
-                spawn(function()
-                    task.wait(15)
-                    if sound and sound.Parent then
-                        sound:Destroy()
-                    end
-                end)
+                end
             end)
         end)
-    end
-    
-    function SoundManager:playSpawnAlert(rarity, mutation)
-        local basePitch = {
-            Secret = 1.4,
-            Awakened = 1.3,
-            Mythic = 1.2,
-            Legendary = 1.1,
-            Rare = 1.0,
-            Uncommon = 0.9,
-            Common = 0.8
-        }
-        
-        local mutationBonus = 0
-        if mutation == "Golden" then
-            mutationBonus = 0.1
-        elseif mutation == "Diamond" then
-            mutationBonus = 0.2
-        end
-        
-        local pitch = (basePitch[rarity] or 1.0) + mutationBonus
-        local volume = CONFIG.SOUND_VOLUME * (mutation == "Diamond" and 1.2 or mutation == "Golden" and 1.1 or 1.0)
-        
-        self:play(CONFIG.ALARM_SOUND_ID, volume, pitch)
-    end
-    
-    local PerformanceMonitor = {
-        totalFrameTime = 0,
-        frameCount = 0
+    end)
+end
+
+function SoundManager:playSpawnAlert(rarity, mutation)
+    local basePitch = {
+        Secret = 1.4,
+        Awakened = 1.3,
+        Mythic = 1.2,
+        Legendary = 1.1,
+        Rare = 1.0,
+        Uncommon = 0.9,
+        Common = 0.8
     }
     
-    function PerformanceMonitor:update(deltaTime)
-        if not deltaTime then return end
-        
-        self.totalFrameTime = self.totalFrameTime + deltaTime
-        self.frameCount = self.frameCount + 1
-        
-        if self.totalFrameTime >= 1.0 then
-            GameState.averageFPS = self.frameCount / self.totalFrameTime
-            self.totalFrameTime = 0
-            self.frameCount = 0
-            
-            if GameState.averageFPS < 30 and CONFIG.UPDATE_INTERVAL < 0.5 then
-                CONFIG.UPDATE_INTERVAL = 0.5
-            elseif GameState.averageFPS > 55 and CONFIG.UPDATE_INTERVAL > 0.2 then
-                CONFIG.UPDATE_INTERVAL = 0.2
-            end
-        end
+    local mutationBonus = 0
+    if mutation == "Golden" then
+        mutationBonus = 0.1
+    elseif mutation == "Diamond" then
+        mutationBonus = 0.2
     end
     
-    local UIManager = {
-        elements = {},
-        animations = {},
-        searchFilters = nil
-    }
+    local pitch = (basePitch[rarity] or 1.0) + mutationBonus
+    local volume = CONFIG.SOUND_VOLUME * (mutation == "Diamond" and 1.2 or mutation == "Golden" and 1.1 or 1.0)
     
-    -- ENHANCED Auto-Buy System
-    local AutoBuySystem = {
-        active = false,
-        currentTarget = nil,
-        currentTargetName = nil,  -- NEW: Track current target name
-        purchasing = false,
-        lastTargetUpdate = 0,
-        wasTriggeredBySpawn = false  -- NEW: Track if auto-buy was triggered by spawn
-    }
+    self:play(CONFIG.ALARM_SOUND_ID, volume, pitch)
+end
+
+local PerformanceMonitor = {
+    totalFrameTime = 0,
+    frameCount = 0
+}
+
+function PerformanceMonitor:update(deltaTime)
+    if not deltaTime then return end
     
-    -- NEW: Function to check if auto-buy should trigger for a character
-    function AutoBuySystem:shouldAutoTrigger(charName, charData)
-        if not gameData.settings.autoTriggerOnSpawn then
-            return false
-        end
-        
-        -- Check if character meets priority threshold (tier 2 or better, or has mutation)
-        local meetsPriorityThreshold = charData.tier <= (gameData.settings.autoTriggerThreshold or CONFIG.AUTO_TRIGGER_PRIORITY_THRESHOLD)
-        local hasMutation = charData.mutation ~= nil
-        
-        return meetsPriorityThreshold or hasMutation
-    end
+    self.totalFrameTime = self.totalFrameTime + deltaTime
+    self.frameCount = self.frameCount + 1
     
-    -- NEW: Function to trigger auto-buy on spawn
-    function AutoBuySystem:triggerOnSpawn(charName)
-        if self.active then
-            return -- Already active
-        end
+    if self.totalFrameTime >= 1.0 then
+        GameState.averageFPS = self.frameCount / self.totalFrameTime
+        self.totalFrameTime = 0
+        self.frameCount = 0
         
-        local charData = COMPLETE_DATABASE[charName]
-        if self:shouldAutoTrigger(charName, charData) then
-            self.wasTriggeredBySpawn = true
-            self:toggle()
-            UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Triggered by " .. (charData.baseChar or charName)
+        if GameState.averageFPS < 30 and CONFIG.UPDATE_INTERVAL < 0.5 then
+            CONFIG.UPDATE_INTERVAL = 0.5
+        elseif GameState.averageFPS > 55 and CONFIG.UPDATE_INTERVAL > 0.2 then
+            CONFIG.UPDATE_INTERVAL = 0.2
         end
     end
+end
+
+local UIManager = {
+    elements = {},
+    animations = {},
+    searchFilters = nil
+}
+
+local AutoBuySystem = {
+    active = false,
+    currentTarget = nil,
+    currentTargetName = nil,
+    purchasing = false,
+    lastTargetUpdate = 0,
+    wasTriggeredBySpawn = false
+}
+
+-- Position player in front of target character for optimal purchasing
+local function positionPlayerInFrontOfTarget(localPlayer, targetCharacter)
+    local torso = targetCharacter:FindFirstChild("Torso") or targetCharacter:FindFirstChild("HumanoidRootPart")
+    if not torso then return false end
     
-    -- NEW: Function to check if current target is still enabled
-    function AutoBuySystem:isCurrentTargetEnabled()
-        if not self.currentTargetName then
-            return true
-        end
-        
-        return gameData.characters[self.currentTargetName] and gameData.characters[self.currentTargetName].enabled
+    -- Get target position and calculate position in front
+    local targetPos = torso.Position
+    local targetCFrame = torso.CFrame
+    local lookVector = targetCFrame.LookVector
+    
+    -- Position 10 studs in front of the target
+    local newPos = targetPos - (lookVector * 10)
+    
+    -- Move player
+    localPlayer.Character:MoveTo(newPos)
+    
+    -- Face the torso
+    local hrp = localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.CFrame = CFrame.new(hrp.Position, targetPos)
     end
     
-    function AutoBuySystem:toggle()
-        self.active = not self.active
-        gameData.settings.autoBuyEnabled = self.active
-        
-        local ring = UIManager.elements.autobuyRing.Ring
-        local statusLabel = UIManager.elements.autoBuyStatus
-        
-        ring.ImageColor3 = self.active and Color3.fromRGB(50,205,50) or Color3.fromRGB(220,53,69)
-        statusLabel.Text = self.active and "Auto-Buy: Active" or "Auto-Buy: Idle"
-        
-        if self.active then
-            spawn(function() self:mainLoop() end)
-        else
-            self.currentTarget = nil
-            self.currentTargetName = nil
-            self.wasTriggeredBySpawn = false
-            if humanoid then
-                humanoid:MoveTo(humanoidRootPart.Position)
-            end
-        end
-        DataManager:save(gameData)
+    return true
+end
+
+-- Attempt to purchase a character using proximity prompts
+local function attemptPurchase(localPlayer, targetCharacter)
+    -- Position & face before buying
+    if not positionPlayerInFrontOfTarget(localPlayer, targetCharacter) then
+        return false
+    end
+
+    -- Wait a moment for positioning to complete
+    task.wait(0.5)
+    
+    -- Trigger the correct prompt
+    local torso = targetCharacter:FindFirstChild("Torso") or targetCharacter:FindFirstChild("HumanoidRootPart")
+    if not torso then return false end
+    
+    local prompt = torso:FindFirstChild("BuyPrompt") or torso:FindFirstChild("BuyPromptOLD")
+    if prompt and prompt:IsA("ProximityPrompt") then
+        fireproximityprompt(prompt)
+        return true
     end
     
-    function AutoBuySystem:findBestTarget()
-        local bestTarget = nil
-        local bestScore = -math.huge
-        local now = tick()
-        
-        if now - self.lastTargetUpdate < 0.5 then
-            return bestTarget, bestScore
+    return false
+end
+
+function AutoBuySystem:shouldAutoTrigger(charName, charData)
+    if not gameData.settings.autoTriggerOnSpawn then
+        return false
+    end
+    
+    local meetsPriorityThreshold = charData.tier <= (gameData.settings.autoTriggerThreshold or CONFIG.AUTO_TRIGGER_PRIORITY_THRESHOLD)
+    local hasMutation = charData.mutation ~= nil
+    
+    return meetsPriorityThreshold or hasMutation
+end
+
+function AutoBuySystem:triggerOnSpawn(charName)
+    if self.active then
+        return
+    end
+    
+    local charData = COMPLETE_DATABASE[charName]
+    if self:shouldAutoTrigger(charName, charData) then
+        self.wasTriggeredBySpawn = true
+        self:toggle()
+        UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Triggered by " .. (charData.baseChar or charName)
+    end
+end
+
+function AutoBuySystem:isCurrentTargetEnabled()
+    if not self.currentTargetName then
+        return true
+    end
+    
+    return gameData.characters[self.currentTargetName] and gameData.characters[self.currentTargetName].enabled
+end
+
+function AutoBuySystem:toggle()
+    self.active = not self.active
+    gameData.settings.autoBuyEnabled = self.active
+    
+    local ring = UIManager.elements.autobuyRing.Ring
+    local statusLabel = UIManager.elements.autoBuyStatus
+    
+    ring.ImageColor3 = self.active and Color3.fromRGB(50,205,50) or Color3.fromRGB(220,53,69)
+    statusLabel.Text = self.active and "Auto-Buy: Active" or "Auto-Buy: Idle"
+    
+    if self.active then
+        spawn(function() self:mainLoop() end)
+    else
+        self.currentTarget = nil
+        self.currentTargetName = nil
+        self.wasTriggeredBySpawn = false
+        if humanoid then
+            humanoid:MoveTo(humanoidRootPart.Position)
         end
-        
-        self.lastTargetUpdate = now
-        
-        for _, charName in ipairs(characterNames) do
-            local charData = COMPLETE_DATABASE[charName]
-            local trackData = gameData.characters[charName]
-            
-            if not trackData.enabled then continue end
-            
-            local target = workspace:FindFirstChild(charName)
-            if target and target:IsA("Model") and target:FindFirstChild("HumanoidRootPart") then
-                local distance = (humanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude
-                
-                local rarityScore = (10 - charData.tier) * 100
-                local mutationBonus = charData.mutation == "Diamond" and 500 or charData.mutation == "Golden" and 250 or 0
-                local distancePenalty = distance * 5
-                
-                local score = rarityScore + mutationBonus - distancePenalty
-                
-                if score > bestScore then
-                    bestScore = score
-                    bestTarget = target
-                end
-            end
-        end
-        
+    end
+    DataManager:save(gameData)
+end
+
+function AutoBuySystem:findBestTarget()
+    local bestTarget = nil
+    local bestScore = -math.huge
+    local now = tick()
+    
+    if now - self.lastTargetUpdate < 0.5 then
         return bestTarget, bestScore
     end
     
-    -- ENHANCED: Follow target with immediate stop check
-    function AutoBuySystem:followTarget(target)
-        if not target or not target.Parent then return false end
+    self.lastTargetUpdate = now
     
-        if humanoid and humanoid.WalkSpeed ~= 21 then
-            humanoid.WalkSpeed = 21
+    for _, charName in ipairs(characterNames) do
+        local charData = COMPLETE_DATABASE[charName]
+        local trackData = gameData.characters[charName]
+        
+        if not trackData.enabled then continue end
+        
+        local target = workspace:FindFirstChild(charName)
+        if target and target:IsA("Model") and target:FindFirstChild("HumanoidRootPart") then
+            local distance = (humanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude
+            
+            local rarityScore = (10 - charData.tier) * 100
+            local mutationBonus = charData.mutation == "Diamond" and 500 or charData.mutation == "Golden" and 250 or 0
+            local distancePenalty = distance * 5
+            
+            local score = rarityScore + mutationBonus - distancePenalty
+            
+            if score > bestScore then
+                bestScore = score
+                bestTarget = target
+            end
         end
+    end
     
-        local startTime = tick()
-        local targetName = target.Name
-        self.currentTargetName = targetName  -- NEW: Set current target name
-    
-        while self.active and target.Parent and (tick() - startTime) < CONFIG.MAX_FOLLOW_TIME do
-            -- NEW: Check if target is still enabled - stop immediately if disabled
-            if not self:isCurrentTargetEnabled() then
-                UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Target disabled - stopping"
-                self.currentTarget = nil
-                self.currentTargetName = nil
-                if humanoid then
-                    humanoid:MoveTo(humanoidRootPart.Position)
-                end
+    return bestTarget, bestScore
+end
+
+function AutoBuySystem:followTarget(target)
+    if not target or not target.Parent then return false end
+
+    if humanoid and humanoid.WalkSpeed ~= 21 then
+        humanoid.WalkSpeed = 21
+    end
+
+    local startTime = tick()
+    local targetName = target.Name
+    self.currentTargetName = targetName
+
+    while self.active and target.Parent and (tick() - startTime) < CONFIG.MAX_FOLLOW_TIME do
+        if not self:isCurrentTargetEnabled() then
+            UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Target disabled - stopping"
+            self.currentTarget = nil
+            self.currentTargetName = nil
+            if humanoid then
+                humanoid:MoveTo(humanoidRootPart.Position)
+            end
+            return false
+        end
+
+        local distance = (humanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude
+
+        if distance <= CONFIG.AUTO_BUY_DISTANCE then
+            -- Verify we're purchasing the correct target
+            if target.Name ~= targetName then
+                UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Wrong target detected - aborting"
                 return false
             end
-    
-            local distance = (humanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude
-    
-            if distance <= CONFIG.AUTO_BUY_DISTANCE then
-                local lookDirection = (target.HumanoidRootPart.Position - humanoidRootPart.Position).Unit
-                humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.Position, humanoidRootPart.Position + Vector3.new(lookDirection.X, 0, lookDirection.Z))
-    
-                Services.VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
-                task.wait(CONFIG.PURCHASE_DURATION)
-                Services.VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
-    
+            
+            local success = attemptPurchase(player, target)
+            if success then
                 UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Purchase attempted"
                 
-                -- NEW: If this was triggered by spawn, turn off auto-buy after purchase
                 if self.wasTriggeredBySpawn then
                     task.wait(1)
-                    self:toggle() -- Turn off auto-buy
+                    self:toggle()
                     UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Auto-disabled after spawn purchase"
                 end
                 
                 task.wait(2)
                 return true
+            else
+                UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Failed to find purchase prompt"
+                task.wait(2)
+                return false
             end
-    
-            humanoid:MoveTo(target.HumanoidRootPart.Position)
-            UIManager.elements.autoBuyStatus.Text = ("Auto-Buy: Following %s (%.1fm)"):format(
-                COMPLETE_DATABASE[targetName].baseChar, distance
-            )
-    
-            task.wait(0.1)
         end
+
+        humanoid:MoveTo(target.HumanoidRootPart.Position)
+        UIManager.elements.autoBuyStatus.Text = ("Auto-Buy: Following %s (%.1fm)"):format(
+            COMPLETE_DATABASE[targetName].baseChar, distance
+        )
+
+        task.wait(0.1)
+    end
+
+    UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Target lost"
+    self.currentTargetName = nil
+    return false
+end
+
+function AutoBuySystem:mainLoop()
+    while self.active do
+        if not self:isCurrentTargetEnabled() then
+            UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Current target disabled"
+            self.currentTarget = nil
+            self.currentTargetName = nil
+            if humanoid then
+                humanoid:MoveTo(humanoidRootPart.Position)
+            end
+            task.wait(1)
+            continue
+        end
+        
+        local target, score = self:findBestTarget()
+        
+        if target then
+            self.currentTarget = target
+            self:followTarget(target)
+        else
+            UIManager.elements.autoBuyStatus.Text = "Auto-Buy: No targets found"
+            self.currentTargetName = nil
+            task.wait(2)
+        end
+        
+        task.wait(0.5)
+    end
+end
+
+function UIManager:create()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "VolleyballVision"
+    screenGui.Parent = playerGui
+    screenGui.ResetOnSpawn = false
+    screenGui.IgnoreGuiInset = true
+    screenGui.DisplayOrder = 100
     
-        UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Target lost"
-        self.currentTargetName = nil
-        return false
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainContainer"
+    mainFrame.Size = UDim2.new(0, 900, 0, 600)
+    mainFrame.Position = UDim2.new(0.5, -450, 0.5, -300)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.ClipsDescendants = false
+    mainFrame.Parent = screenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 16)
+    corner.Parent = mainFrame
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(60, 60, 80)
+    stroke.Thickness = 2
+    stroke.Transparency = 0.3
+    stroke.Parent = mainFrame
+    
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 25, 35)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 12, 18))
+    })
+    gradient.Rotation = 135
+    gradient.Parent = mainFrame
+    
+    self.elements.screenGui = screenGui
+    self.elements.mainFrame = mainFrame
+    
+    self:createHeader()
+    self:createSidebar()
+    self:createMainPanel()
+    self:createFooter()
+    self:makeDraggable()
+
+    self.searchFilters = gameData.filters
+    
+    return screenGui
+end
+
+function UIManager:createHeader()
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Size = UDim2.new(1, 0, 0, 60)
+    header.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+    header.BorderSizePixel = 0
+    header.Parent = self.elements.mainFrame
+
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 16)
+    headerCorner.Parent = header
+
+    local titleContainer = Instance.new("Frame")
+    titleContainer.Size = UDim2.new(0.6, 0, 1, 0)
+    titleContainer.Position = UDim2.new(0, 20, 0, 0)
+    titleContainer.BackgroundTransparency = 1
+    titleContainer.Parent = header
+
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Size = UDim2.new(1, 0, 0, 30)
+    title.Position = UDim2.new(0, 0, 0, 5)
+    title.BackgroundTransparency = 1
+    title.Text = SCRIPT_NAME
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 20
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = titleContainer
+
+    local subtitle = Instance.new("TextLabel")
+    subtitle.Size = UDim2.new(1, 0, 0, 15)
+    subtitle.Position = UDim2.new(0, 0, 0, 35)
+    subtitle.BackgroundTransparency = 1
+    subtitle.Text = SCRIPT_VERSION
+    subtitle.TextColor3 = Color3.fromRGB(150, 150, 200)
+    subtitle.Font = Enum.Font.Gotham
+    subtitle.TextSize = 11
+    subtitle.TextXAlignment = Enum.TextXAlignment.Left
+    subtitle.Parent = titleContainer
+
+    local controlContainer = Instance.new("Frame")
+    controlContainer.Size = UDim2.new(0, 140, 0, 45)
+    controlContainer.Position = UDim2.new(1, -150, 0.5, -22.5)
+    controlContainer.BackgroundTransparency = 1
+    controlContainer.Parent = header
+
+    local autoBuyRing = Instance.new("Frame")
+    autoBuyRing.Name = "AutoBuyRing"
+    autoBuyRing.Size = UDim2.new(0, 36, 0, 36)
+    autoBuyRing.Position = UDim2.new(0, 0, 0.5, -18)
+    autoBuyRing.BackgroundTransparency = 1
+    autoBuyRing.Parent = controlContainer
+
+    local ring = Instance.new("ImageLabel")
+    ring.Name = "Ring"
+    ring.Size = UDim2.new(1, 0, 1, 0)
+    ring.Image = "rbxassetid://6026568198"
+    ring.BackgroundTransparency = 1
+    ring.ImageColor3 = gameData and gameData.settings.autoBuyEnabled and Color3.fromRGB(50,205,50) or Color3.fromRGB(220,53,69)
+    ring.Parent = autoBuyRing
+
+    local ringHole = Instance.new("Frame")
+    ringHole.Name = "RingHole"
+    ringHole.AnchorPoint = Vector2.new(0.5,0.5)
+    ringHole.Position = UDim2.new(0.5,0,0.5,0)
+    ringHole.Size = UDim2.new(0, 18, 0, 18)
+    ringHole.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+    ringHole.BorderSizePixel = 0
+    ringHole.Parent = autoBuyRing
+    local ringHoleCorner = Instance.new("UICorner")
+    ringHoleCorner.CornerRadius = UDim.new(1,0)
+    ringHoleCorner.Parent = ringHole
+
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Name = "AutoBuyStatus"
+    statusLabel.Size = UDim2.new(0, 110, 0, 18)
+    statusLabel.Position = UDim2.new(0, 40, 0.5, -9)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Text = gameData and gameData.settings.autoBuyEnabled and "Auto-Buy: Active" or "Auto-Buy: Idle"
+    statusLabel.TextColor3 = Color3.fromRGB(200, 255, 200)
+    statusLabel.Font = Enum.Font.GothamBold
+    statusLabel.TextSize = 12
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statusLabel.Parent = controlContainer
+
+    self.elements.header = header
+    self.elements.title = title
+    self.elements.autobuyRing = autoBuyRing
+    self.elements.autoBuyStatus = statusLabel
+
+    autoBuyRing.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            AutoBuySystem:toggle()
+        end
+    end)
+end
+
+function UIManager:createSidebar()
+    local sidebar = Instance.new("Frame")
+    sidebar.Name = "Sidebar"
+    sidebar.Size = UDim2.new(0, 320, 1, -110)
+    sidebar.Position = UDim2.new(0, 15, 0, 70)
+    sidebar.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    sidebar.BorderSizePixel = 0
+    sidebar.Parent = self.elements.mainFrame
+    
+    local sidebarCorner = Instance.new("UICorner")
+    sidebarCorner.CornerRadius = UDim.new(0, 12)
+    sidebarCorner.Parent = sidebar
+    
+    local sidebarStroke = Instance.new("UIStroke")
+    sidebarStroke.Color = Color3.fromRGB(60, 60, 80)
+    sidebarStroke.Thickness = 1
+    sidebarStroke.Transparency = 0.6
+    sidebarStroke.Parent = sidebar
+    
+    self:createSearchSection(sidebar)
+    self:createCharacterList(sidebar)
+    
+    self.elements.sidebar = sidebar
+end
+
+function UIManager:createSearchSection(parent)
+    local searchContainer = Instance.new("Frame")
+    searchContainer.Size = UDim2.new(1, -20, 0, 120)
+    searchContainer.Position = UDim2.new(0, 10, 0, 10)
+    searchContainer.BackgroundTransparency = 1
+    searchContainer.Parent = parent
+    
+    local searchBox = Instance.new("TextBox")
+    searchBox.Name = "SearchBox"
+    searchBox.Size = UDim2.new(1, 0, 0, 35)
+    searchBox.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    searchBox.PlaceholderText = "Search characters..."
+    searchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 130)
+    searchBox.Text = gameData.filters.searchText
+    searchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    searchBox.Font = Enum.Font.Gotham
+    searchBox.TextSize = 14
+    searchBox.BorderSizePixel = 0
+    searchBox.Parent = searchContainer
+    
+    local searchCorner = Instance.new("UICorner")
+    searchCorner.CornerRadius = UDim.new(0, 8)
+    searchCorner.Parent = searchBox
+    
+    local exactToggle = self:createToggleButton("Exact Match", UDim2.new(0.48, 0, 0, 25), UDim2.new(0, 0, 0, 45), function(isToggled)
+        gameData.filters.exactMatch = isToggled
+        self:updateCharacterList()
+        DataManager:save(gameData)
+    end, gameData.filters.exactMatch)
+    exactToggle.Parent = searchContainer
+    
+    local enabledToggle = self:createToggleButton("Enabled Only", UDim2.new(0.48, 0, 0, 25), UDim2.new(0.52, 0, 0, 45), function(isToggled)
+        gameData.filters.enabledOnly = isToggled
+        self:updateCharacterList()
+        DataManager:save(gameData)
+    end, gameData.filters.enabledOnly)
+    enabledToggle.Parent = searchContainer
+    
+    local rarityFilter = self:createFilterDropdown("Rarity", {"All", "Secret", "Awakened", "Mythic", "Legendary", "Rare", "Uncommon", "Common"}, 
+        UDim2.new(0.48, 0, 0, 25), UDim2.new(0, 0, 0, 80), function(selected)
+        gameData.filters.selectedRarity = selected == "All" and nil or selected
+        self:updateCharacterList()
+        DataManager:save(gameData)
+    end, gameData.filters.selectedRarity or "All")
+    rarityFilter.Parent = searchContainer
+    
+    local mutationFilter = self:createFilterDropdown("Mutation", {"All", "Base", "Golden", "Diamond"}, 
+        UDim2.new(0.48, 0, 0, 25), UDim2.new(0.52, 0, 0, 80), function(selected)
+        gameData.filters.selectedMutation = selected == "All" and nil or selected
+        self:updateCharacterList()
+        DataManager:save(gameData)
+    end, gameData.filters.selectedMutation or "All")
+    mutationFilter.Parent = searchContainer
+    
+    self.elements.searchBox = searchBox
+    self.elements.exactToggle = exactToggle
+    self.elements.enabledToggle = enabledToggle
+    self.elements.rarityFilter = rarityFilter
+    self.elements.mutationFilter = mutationFilter
+    
+    self:connectSearchEvents()
+end
+
+function UIManager:createToggleButton(text, size, position, callback, initialState)
+    local btn = Instance.new("TextButton")
+    btn.Size = size
+    btn.Position = position
+    btn.BackgroundColor3 = initialState and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(40, 40, 50)
+    btn.Text = text
+    btn.TextColor3 = initialState and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(200, 200, 200)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 10
+    btn.BorderSizePixel = 0
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+    
+    btn.MouseButton1Click:Connect(function()
+        local isToggled = btn.BackgroundColor3 == Color3.fromRGB(40, 40, 50)
+        btn.BackgroundColor3 = isToggled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(40, 40, 50)
+        btn.TextColor3 = isToggled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(200, 200, 200)
+        callback(isToggled)
+    end)
+    
+    return btn
+end
+
+function UIManager:createFilterDropdown(label, options, size, position, callback, initialState)
+    local container = Instance.new("Frame")
+    container.Size = size
+    container.Position = position
+    container.BackgroundTransparency = 1
+    
+    local dropdown = Instance.new("TextButton")
+    dropdown.Size = UDim2.new(1, 0, 1, 0)
+    dropdown.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    local initialText = initialState or "All"
+    dropdown.Text = label .. ": " .. initialText
+    dropdown.TextColor3 = Color3.fromRGB(200, 200, 200)
+    dropdown.Font = Enum.Font.Gotham
+    dropdown.TextSize = 10
+    dropdown.BorderSizePixel = 0
+    dropdown.Parent = container
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = dropdown
+    
+    local currentIndex = 1
+    for i, option in ipairs(options) do
+        if option == initialText then
+            currentIndex = i
+            break
+        end
     end
     
-    function AutoBuySystem:attemptPurchase(target)
-        if self.purchasing then return false end
-        
-        self.purchasing = true
-        local targetName = target.Name
-        
-        UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Purchasing " .. COMPLETE_DATABASE[targetName].baseChar
-        
-        local lookDirection = (target.HumanoidRootPart.Position - humanoidRootPart.Position).Unit
-        humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.Position, 
-            humanoidRootPart.Position + Vector3.new(lookDirection.X, 0, lookDirection.Z))
-        
-        Services.VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, nil)
-        task.wait(CONFIG.PURCHASE_DURATION)
-        Services.VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, nil)
-        
-        self.purchasing = false
-        UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Purchase attempted"
-        
-        task.wait(2)
-        return true
-    end
+    dropdown.MouseButton1Click:Connect(function()
+        currentIndex = currentIndex % #options + 1
+        local selected = options[currentIndex]
+        dropdown.Text = label .. ": " .. selected
+        callback(selected)
+    end)
     
-    function AutoBuySystem:mainLoop()
-        while self.active do
-            -- NEW: Check if current target is still enabled
-            if not self:isCurrentTargetEnabled() then
-                UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Current target disabled"
-                self.currentTarget = nil
-                self.currentTargetName = nil
+    return container
+end
+
+function UIManager:connectSearchEvents()
+    self.elements.searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        gameData.filters.searchText = self.elements.searchBox.Text:lower()
+        self:updateCharacterList()
+        DataManager:save(gameData)
+    end)
+end
+
+function UIManager:createCharacterList(parent)
+    local listContainer = Instance.new("Frame")
+    listContainer.Size = UDim2.new(1, -20, 1, -140)
+    listContainer.Position = UDim2.new(0, 10, 0, 130)
+    listContainer.BackgroundTransparency = 1
+    listContainer.Parent = parent
+    
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, 25)
+    header.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    header.BorderSizePixel = 0
+    header.Parent = listContainer
+    
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 6)
+    headerCorner.Parent = header
+    
+    local headerText = Instance.new("TextLabel")
+    headerText.Name = "CharacterCountLabel"
+    headerText.Size = UDim2.new(1, -10, 1, 0)
+    headerText.Position = UDim2.new(0, 10, 0, 0)
+    headerText.BackgroundTransparency = 1
+    headerText.Text = "Characters (0)"
+    headerText.TextColor3 = Color3.fromRGB(200, 200, 255)
+    headerText.Font = Enum.Font.GothamBold
+    headerText.TextSize = 12
+    headerText.TextXAlignment = Enum.TextXAlignment.Left
+    headerText.Parent = header
+    
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Name = "CharacterScroll"
+    scrollFrame.Size = UDim2.new(1, 0, 1, -30)
+    scrollFrame.Position = UDim2.new(0, 0, 0, 30)
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.BorderSizePixel = 0
+    scrollFrame.ScrollBarThickness = 6
+    scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 120)
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scrollFrame.Parent = listContainer
+    
+    self.elements.characterScroll = scrollFrame
+    self.elements.characterItems = {}
+    self.elements.characterCountLabel = headerText
+    
+    self:populateCharacterList()
+end
+
+function UIManager:populateCharacterList()
+    local scrollFrame = self.elements.characterScroll
+    
+    for i, charName in ipairs(characterNames) do
+        local charData = COMPLETE_DATABASE[charName]
+        
+        local itemFrame = Instance.new("Frame")
+        itemFrame.Name = charName:gsub("%s+", "_")
+        itemFrame.Size = UDim2.new(1, -10, 0, 32)
+        itemFrame.Position = UDim2.new(0, 5, 0, (i-1) * 34)
+        itemFrame.BackgroundColor3 = i % 2 == 0 and Color3.fromRGB(32, 32, 42) or Color3.fromRGB(28, 28, 38)
+        itemFrame.BorderSizePixel = 0
+        itemFrame.Parent = scrollFrame
+        
+        local itemCorner = Instance.new("UICorner")
+        itemCorner.CornerRadius = UDim.new(0, 6)
+        itemCorner.Parent = itemFrame
+        
+        local rarityStripe = Instance.new("Frame")
+        rarityStripe.Size = UDim2.new(0, 4, 1, 0)
+        rarityStripe.BackgroundColor3 = RARITY_COLORS[charData.rarity]
+        rarityStripe.BorderSizePixel = 0
+        rarityStripe.Parent = itemFrame
+        
+        local stripeCorner = Instance.new("UICorner")
+        stripeCorner.CornerRadius = UDim.new(0, 2)
+        stripeCorner.Parent = rarityStripe
+        
+        local checkbox = Instance.new("TextButton")
+        checkbox.Size = UDim2.new(0, 20, 0, 20)
+        checkbox.Position = UDim2.new(0, 10, 0.5, -10)
+        checkbox.BackgroundColor3 = Color3.fromRGB(50, 205, 50)
+        checkbox.Text = "✓"
+        checkbox.TextColor3 = Color3.fromRGB(255, 255, 255)
+        checkbox.Font = Enum.Font.GothamBold
+        checkbox.TextSize = 12
+        checkbox.BorderSizePixel = 0
+        checkbox.Parent = itemFrame
+        
+        local checkCorner = Instance.new("UICorner")
+        checkCorner.CornerRadius = UDim.new(0, 4)
+        checkCorner.Parent = checkbox
+        
+        local nameContainer = Instance.new("Frame")
+        nameContainer.Size = UDim2.new(1, -80, 1, 0)
+        nameContainer.Position = UDim2.new(0, 35, 0, 0)
+        nameContainer.BackgroundTransparency = 1
+        nameContainer.Parent = itemFrame
+        
+        local displayName = charName
+        if charData.mutation then
+            displayName = charData.mutation:sub(1,1) .. ". " .. charName:gsub("^" .. charData.mutation .. " ", "")
+        end
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, -25, 0.6, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = displayName
+        nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        nameLabel.Font = Enum.Font.Gotham
+        nameLabel.TextSize = 11
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLabel.Parent = nameContainer
+        
+        local infoLabel = Instance.new("TextLabel")
+        infoLabel.Size = UDim2.new(1, -25, 0.4, 0)
+        infoLabel.Position = UDim2.new(0, 0, 0.6, 0)
+        infoLabel.BackgroundTransparency = 1
+        infoLabel.Text = charData.rarity .. " • Tier " .. charData.tier
+        infoLabel.TextColor3 = RARITY_COLORS[charData.rarity]
+        infoLabel.Font = Enum.Font.Gotham
+        infoLabel.TextSize = 9
+        infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+        infoLabel.Parent = nameContainer
+        
+        if charData.mutation then
+            local mutationIcon = Instance.new("Frame")
+            mutationIcon.Size = UDim2.new(0, 18, 0, 18)
+            mutationIcon.Position = UDim2.new(1, -22, 0.5, -9)
+            mutationIcon.BackgroundColor3 = MUTATION_COLORS[charData.mutation]
+            mutationIcon.BorderSizePixel = 0
+            mutationIcon.Parent = itemFrame
+            
+            local mutationCorner = Instance.new("UICorner")
+            mutationCorner.CornerRadius = UDim.new(1, 0)
+            mutationCorner.Parent = mutationIcon
+            
+            local mutationLabel = Instance.new("TextLabel")
+            mutationLabel.Size = UDim2.new(1, 0, 1, 0)
+            mutationLabel.BackgroundTransparency = 1
+            mutationLabel.Text = charData.mutation:sub(1,1)
+            mutationLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+            mutationLabel.Font = Enum.Font.GothamBold
+            mutationLabel.TextSize = 10
+            mutationLabel.Parent = mutationIcon
+        end
+        
+        self.elements.characterItems[charName] = {
+            frame = itemFrame,
+            checkbox = checkbox,
+            nameLabel = nameLabel,
+            infoLabel = infoLabel
+        }
+        
+        local isEnabled = gameData.characters[charName].enabled
+        checkbox.BackgroundColor3 = isEnabled and Color3.fromRGB(50, 205, 50) or Color3.fromRGB(120, 120, 120)
+        checkbox.Text = isEnabled and "✓" or ""
+
+        checkbox.MouseButton1Click:Connect(function()
+            local enabled = gameData.characters[charName].enabled
+            gameData.characters[charName].enabled = not enabled
+            
+            checkbox.BackgroundColor3 = gameData.characters[charName].enabled and Color3.fromRGB(50, 205, 50) or Color3.fromRGB(120, 120, 120)
+            checkbox.Text = gameData.characters[charName].enabled and "✓" or ""
+            
+            if not gameData.characters[charName].enabled and AutoBuySystem.active and AutoBuySystem.currentTargetName == charName then
+                AutoBuySystem.currentTarget = nil
+                AutoBuySystem.currentTargetName = nil
                 if humanoid then
                     humanoid:MoveTo(humanoidRootPart.Position)
                 end
-                task.wait(1)
-                continue
+                UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Stopped - target disabled"
             end
             
-            local target, score = self:findBestTarget()
+            self:updateTrackingCount()
+            self:updateMainPanel()
+            DataManager:save(gameData)
+        end)
+    end
+    
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #characterNames * 34)
+end
+
+function UIManager:updateCharacterList()
+    if not self.elements.characterItems then return end
+    
+    local visibleCount = 0
+    local searchText = gameData.filters.searchText
+    local exactMatch = gameData.filters.exactMatch
+    local rarityFilter = gameData.filters.selectedRarity
+    local mutationFilter = gameData.filters.selectedMutation
+    local enabledOnly = gameData.filters.enabledOnly
+    
+    for _, charName in ipairs(characterNames) do
+        local item = self.elements.characterItems[charName]
+        if not item then continue end
+        
+        local charData = COMPLETE_DATABASE[charName]
+        local trackData = gameData.characters[charName]
+        local shouldShow = true
+        
+        if searchText ~= "" then
+            local nameToSearch = charName:lower()
+            local baseCharToSearch = charData.baseChar:lower()
             
-            if target then
-                self.currentTarget = target
-                self:followTarget(target)
+            if exactMatch then
+                shouldShow = (nameToSearch == searchText) or (baseCharToSearch == searchText) or (nameToSearch:find(searchText, 1, true))
             else
-                UIManager.elements.autoBuyStatus.Text = "Auto-Buy: No targets found"
-                self.currentTargetName = nil
-                task.wait(2)
-            end
-            
-            task.wait(0.5)
-        end
-    end
-    
-    -- UI Manager
-    function UIManager:create()
-        local screenGui = Instance.new("ScreenGui")
-        screenGui.Name = "HaikyuuTrackerPro"
-        screenGui.Parent = playerGui
-        screenGui.ResetOnSpawn = false
-        screenGui.IgnoreGuiInset = true
-        screenGui.DisplayOrder = 100
-        
-        local mainFrame = Instance.new("Frame")
-        mainFrame.Name = "MainContainer"
-        mainFrame.Size = UDim2.new(0, 900, 0, 600)
-        mainFrame.Position = UDim2.new(0.5, -450, 0.5, -300)
-        mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-        mainFrame.BorderSizePixel = 0
-        mainFrame.ClipsDescendants = false
-        mainFrame.Parent = screenGui
-        
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 16)
-        corner.Parent = mainFrame
-        
-        local stroke = Instance.new("UIStroke")
-        stroke.Color = Color3.fromRGB(60, 60, 80)
-        stroke.Thickness = 2
-        stroke.Transparency = 0.3
-        stroke.Parent = mainFrame
-        
-        local gradient = Instance.new("UIGradient")
-        gradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 25, 35)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 12, 18))
-        })
-        gradient.Rotation = 135
-        gradient.Parent = mainFrame
-        
-        self.elements.screenGui = screenGui
-        self.elements.mainFrame = mainFrame
-        
-        self:createHeader()
-        self:createSidebar()
-        self:createMainPanel()
-        self:createFooter()
-        self:makeDraggable()
-    
-        self.searchFilters = gameData.filters
-        
-        return screenGui
-    end
-    
-    function UIManager:createHeader()
-        local header = Instance.new("Frame")
-        header.Name = "Header"
-        header.Size = UDim2.new(1, 0, 0, 60)
-        header.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
-        header.BorderSizePixel = 0
-        header.Parent = self.elements.mainFrame
-    
-        local headerCorner = Instance.new("UICorner")
-        headerCorner.CornerRadius = UDim.new(0, 16)
-        headerCorner.Parent = header
-    
-        local titleContainer = Instance.new("Frame")
-        titleContainer.Size = UDim2.new(0.6, 0, 1, 0)
-        titleContainer.Position = UDim2.new(0, 20, 0, 0)
-        titleContainer.BackgroundTransparency = 1
-        titleContainer.Parent = header
-    
-        local title = Instance.new("TextLabel")
-        title.Name = "Title"
-        title.Size = UDim2.new(1, 0, 0, 30)
-        title.Position = UDim2.new(0, 0, 0, 5)
-        title.BackgroundTransparency = 1
-        title.Text = "Haikyuu Tracker Pro"
-        title.TextColor3 = Color3.fromRGB(255, 255, 255)
-        title.Font = Enum.Font.GothamBold
-        title.TextSize = 20
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.Parent = titleContainer
-    
-        local subtitle = Instance.new("TextLabel")
-        subtitle.Size = UDim2.new(1, 0, 0, 15)
-        subtitle.Position = UDim2.new(0, 0, 0, 35)
-        subtitle.BackgroundTransparency = 1
-        subtitle.Text = "v3.3 - Enhanced Auto-Buy Edition"
-        subtitle.TextColor3 = Color3.fromRGB(150, 150, 200)
-        subtitle.Font = Enum.Font.Gotham
-        subtitle.TextSize = 11
-        subtitle.TextXAlignment = Enum.TextXAlignment.Left
-        subtitle.Parent = titleContainer
-    
-        local controlContainer = Instance.new("Frame")
-        controlContainer.Size = UDim2.new(0, 140, 0, 45)
-        controlContainer.Position = UDim2.new(1, -150, 0.5, -22.5)
-        controlContainer.BackgroundTransparency = 1
-        controlContainer.Parent = header
-    
-        local autoBuyRing = Instance.new("Frame")
-        autoBuyRing.Name = "AutoBuyRing"
-        autoBuyRing.Size = UDim2.new(0, 36, 0, 36)
-        autoBuyRing.Position = UDim2.new(0, 0, 0.5, -18)
-        autoBuyRing.BackgroundTransparency = 1
-        autoBuyRing.Parent = controlContainer
-    
-        local ring = Instance.new("ImageLabel")
-        ring.Name = "Ring"
-        ring.Size = UDim2.new(1, 0, 1, 0)
-        ring.Image = "rbxassetid://6026568198"
-        ring.BackgroundTransparency = 1
-        ring.ImageColor3 = gameData and gameData.settings.autoBuyEnabled and Color3.fromRGB(50,205,50) or Color3.fromRGB(220,53,69)
-        ring.Parent = autoBuyRing
-    
-        local ringHole = Instance.new("Frame")
-        ringHole.Name = "RingHole"
-        ringHole.AnchorPoint = Vector2.new(0.5,0.5)
-        ringHole.Position = UDim2.new(0.5,0,0.5,0)
-        ringHole.Size = UDim2.new(0, 18, 0, 18)
-        ringHole.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-        ringHole.BorderSizePixel = 0
-        ringHole.Parent = autoBuyRing
-        local ringHoleCorner = Instance.new("UICorner")
-        ringHoleCorner.CornerRadius = UDim.new(1,0)
-        ringHoleCorner.Parent = ringHole
-    
-        local statusLabel = Instance.new("TextLabel")
-        statusLabel.Name = "AutoBuyStatus"
-        statusLabel.Size = UDim2.new(0, 110, 0, 18)
-        statusLabel.Position = UDim2.new(0, 40, 0.5, -9)
-        statusLabel.BackgroundTransparency = 1
-        statusLabel.Text = gameData and gameData.settings.autoBuyEnabled and "Auto-Buy: Active" or "Auto-Buy: Idle"
-        statusLabel.TextColor3 = Color3.fromRGB(200, 255, 200)
-        statusLabel.Font = Enum.Font.GothamBold
-        statusLabel.TextSize = 12
-        statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-        statusLabel.Parent = controlContainer
-    
-        self.elements.header = header
-        self.elements.title = title
-        self.elements.autobuyRing = autoBuyRing
-        self.elements.autoBuyStatus = statusLabel
-    
-        autoBuyRing.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                AutoBuySystem:toggle()
-            end
-        end)
-    end
-    
-    function UIManager:createSidebar()
-        local sidebar = Instance.new("Frame")
-        sidebar.Name = "Sidebar"
-        sidebar.Size = UDim2.new(0, 320, 1, -110)
-        sidebar.Position = UDim2.new(0, 15, 0, 70)
-        sidebar.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-        sidebar.BorderSizePixel = 0
-        sidebar.Parent = self.elements.mainFrame
-        
-        local sidebarCorner = Instance.new("UICorner")
-        sidebarCorner.CornerRadius = UDim.new(0, 12)
-        sidebarCorner.Parent = sidebar
-        
-        local sidebarStroke = Instance.new("UIStroke")
-        sidebarStroke.Color = Color3.fromRGB(60, 60, 80)
-        sidebarStroke.Thickness = 1
-        sidebarStroke.Transparency = 0.6
-        sidebarStroke.Parent = sidebar
-        
-        self:createSearchSection(sidebar)
-        self:createCharacterList(sidebar)
-        
-        self.elements.sidebar = sidebar
-    end
-    
-    function UIManager:createSearchSection(parent)
-        local searchContainer = Instance.new("Frame")
-        searchContainer.Size = UDim2.new(1, -20, 0, 120)
-        searchContainer.Position = UDim2.new(0, 10, 0, 10)
-        searchContainer.BackgroundTransparency = 1
-        searchContainer.Parent = parent
-        
-        local searchBox = Instance.new("TextBox")
-        searchBox.Name = "SearchBox"
-        searchBox.Size = UDim2.new(1, 0, 0, 35)
-        searchBox.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-        searchBox.PlaceholderText = "Search characters..."
-        searchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 130)
-        searchBox.Text = gameData.filters.searchText
-        searchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-        searchBox.Font = Enum.Font.Gotham
-        searchBox.TextSize = 14
-        searchBox.BorderSizePixel = 0
-        searchBox.Parent = searchContainer
-        
-        local searchCorner = Instance.new("UICorner")
-        searchCorner.CornerRadius = UDim.new(0, 8)
-        searchCorner.Parent = searchBox
-        
-        local exactToggle = self:createToggleButton("Exact Match", UDim2.new(0.48, 0, 0, 25), UDim2.new(0, 0, 0, 45), function(isToggled)
-            gameData.filters.exactMatch = isToggled
-            self:updateCharacterList()
-            DataManager:save(gameData)
-        end, gameData.filters.exactMatch)
-        exactToggle.Parent = searchContainer
-        
-        local enabledToggle = self:createToggleButton("Enabled Only", UDim2.new(0.48, 0, 0, 25), UDim2.new(0.52, 0, 0, 45), function(isToggled)
-            gameData.filters.enabledOnly = isToggled
-            self:updateCharacterList()
-            DataManager:save(gameData)
-        end, gameData.filters.enabledOnly)
-        enabledToggle.Parent = searchContainer
-        
-        local rarityFilter = self:createFilterDropdown("Rarity", {"All", "Secret", "Awakened", "Mythic", "Legendary", "Rare", "Uncommon", "Common"}, 
-            UDim2.new(0.48, 0, 0, 25), UDim2.new(0, 0, 0, 80), function(selected)
-            gameData.filters.selectedRarity = selected == "All" and nil or selected
-            self:updateCharacterList()
-            DataManager:save(gameData)
-        end, gameData.filters.selectedRarity or "All")
-        rarityFilter.Parent = searchContainer
-        
-        local mutationFilter = self:createFilterDropdown("Mutation", {"All", "Base", "Golden", "Diamond"}, 
-            UDim2.new(0.48, 0, 0, 25), UDim2.new(0.52, 0, 0, 80), function(selected)
-            gameData.filters.selectedMutation = selected == "All" and nil or selected
-            self:updateCharacterList()
-            DataManager:save(gameData)
-        end, gameData.filters.selectedMutation or "All")
-        mutationFilter.Parent = searchContainer
-        
-        self.elements.searchBox = searchBox
-        self.elements.exactToggle = exactToggle
-        self.elements.enabledToggle = enabledToggle
-        self.elements.rarityFilter = rarityFilter
-        self.elements.mutationFilter = mutationFilter
-        
-        self:connectSearchEvents()
-    end
-    
-    function UIManager:createToggleButton(text, size, position, callback, initialState)
-        local btn = Instance.new("TextButton")
-        btn.Size = size
-        btn.Position = position
-        btn.BackgroundColor3 = initialState and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(40, 40, 50)
-        btn.Text = text
-        btn.TextColor3 = initialState and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(200, 200, 200)
-        btn.Font = Enum.Font.Gotham
-        btn.TextSize = 10
-        btn.BorderSizePixel = 0
-        
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 6)
-        corner.Parent = btn
-        
-        btn.MouseButton1Click:Connect(function()
-            local isToggled = btn.BackgroundColor3 == Color3.fromRGB(40, 40, 50)
-            btn.BackgroundColor3 = isToggled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(40, 40, 50)
-            btn.TextColor3 = isToggled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(200, 200, 200)
-            callback(isToggled)
-        end)
-        
-        return btn
-    end
-    
-    function UIManager:createFilterDropdown(label, options, size, position, callback, initialState)
-        local container = Instance.new("Frame")
-        container.Size = size
-        container.Position = position
-        container.BackgroundTransparency = 1
-        
-        local dropdown = Instance.new("TextButton")
-        dropdown.Size = UDim2.new(1, 0, 1, 0)
-        dropdown.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-        local initialText = initialState or "All"
-        dropdown.Text = label .. ": " .. initialText
-        dropdown.TextColor3 = Color3.fromRGB(200, 200, 200)
-        dropdown.Font = Enum.Font.Gotham
-        dropdown.TextSize = 10
-        dropdown.BorderSizePixel = 0
-        dropdown.Parent = container
-        
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 6)
-        corner.Parent = dropdown
-        
-        local currentIndex = 1
-        for i, option in ipairs(options) do
-            if option == initialText then
-                currentIndex = i
-                break
+                shouldShow = nameToSearch:find(searchText, 1, true) ~= nil or baseCharToSearch:find(searchText, 1, true) ~= nil
             end
         end
         
-        dropdown.MouseButton1Click:Connect(function()
-            currentIndex = currentIndex % #options + 1
-            local selected = options[currentIndex]
-            dropdown.Text = label .. ": " .. selected
-            callback(selected)
-        end)
+        if shouldShow and rarityFilter and rarityFilter ~= "All" then
+            shouldShow = charData.rarity == rarityFilter
+        end
         
-        return container
+        if shouldShow and mutationFilter and mutationFilter ~= "All" then
+            if mutationFilter == "Base" then
+                shouldShow = charData.mutation == nil
+            else
+                shouldShow = charData.mutation == mutationFilter
+            end
+        end
+        
+        if shouldShow and enabledOnly then
+            shouldShow = trackData.enabled
+        end
+        
+        if shouldShow then
+            item.frame.Visible = true
+            item.frame.Position = UDim2.new(0, 5, 0, visibleCount * 34)
+            visibleCount = visibleCount + 1
+        else
+            item.frame.Visible = false
+        end
     end
     
-    function UIManager:connectSearchEvents()
-        self.elements.searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-            gameData.filters.searchText = self.elements.searchBox.Text:lower()
-            self:updateCharacterList()
-            DataManager:save(gameData)
-        end)
-    end
+    GameState.trackingDisplayed = visibleCount
+    self.elements.characterCountLabel.Text = "Characters (" .. GameState.trackingDisplayed .. ")"
+    self.elements.characterScroll.CanvasSize = UDim2.new(0, 0, 0, visibleCount * 34)
+    self:updateFooter()
+end
+
+function UIManager:createMainPanel()
+    local mainPanel = Instance.new("Frame")
+    mainPanel.Name = "MainPanel"
+    mainPanel.Size = UDim2.new(1, -350, 1, -110)
+    mainPanel.Position = UDim2.new(0, 340, 0, 70)
+    mainPanel.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    mainPanel.BorderSizePixel = 0
+    mainPanel.Parent = self.elements.mainFrame
     
-    function UIManager:createCharacterList(parent)
-        local listContainer = Instance.new("Frame")
-        listContainer.Size = UDim2.new(1, -20, 1, -140)
-        listContainer.Position = UDim2.new(0, 10, 0, 130)
-        listContainer.BackgroundTransparency = 1
-        listContainer.Parent = parent
-        
-        local header = Instance.new("Frame")
-        header.Size = UDim2.new(1, 0, 0, 25)
-        header.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-        header.BorderSizePixel = 0
-        header.Parent = listContainer
-        
-        local headerCorner = Instance.new("UICorner")
-        headerCorner.CornerRadius = UDim.new(0, 6)
-        headerCorner.Parent = header
-        
-        local headerText = Instance.new("TextLabel")
-        headerText.Name = "CharacterCountLabel"
-        headerText.Size = UDim2.new(1, -10, 1, 0)
-        headerText.Position = UDim2.new(0, 10, 0, 0)
-        headerText.BackgroundTransparency = 1
-        headerText.Text = "Characters (0)"
-        headerText.TextColor3 = Color3.fromRGB(200, 200, 255)
-        headerText.Font = Enum.Font.GothamBold
-        headerText.TextSize = 12
-        headerText.TextXAlignment = Enum.TextXAlignment.Left
-        headerText.Parent = header
-        
-        local scrollFrame = Instance.new("ScrollingFrame")
-        scrollFrame.Name = "CharacterScroll"
-        scrollFrame.Size = UDim2.new(1, 0, 1, -30)
-        scrollFrame.Position = UDim2.new(0, 0, 0, 30)
-        scrollFrame.BackgroundTransparency = 1
-        scrollFrame.BorderSizePixel = 0
-        scrollFrame.ScrollBarThickness = 6
-        scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 120)
-        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-        scrollFrame.Parent = listContainer
-        
-        self.elements.characterScroll = scrollFrame
-        self.elements.characterItems = {}
-        self.elements.characterCountLabel = headerText
-        
-        self:populateCharacterList()
-    end
+    local panelCorner = Instance.new("UICorner")
+    panelCorner.CornerRadius = UDim.new(0, 12)
+    panelCorner.Parent = mainPanel
     
-    function UIManager:populateCharacterList()
-        local scrollFrame = self.elements.characterScroll
+    local panelStroke = Instance.new("UIStroke")
+    panelStroke.Color = Color3.fromRGB(60, 60, 80)
+    panelStroke.Thickness = 1
+    panelStroke.Transparency = 0.6
+    panelStroke.Parent = mainPanel
+    
+    self:createTrackingHeader(mainPanel)
+    self:createTrackingArea(mainPanel)
+    
+    self.elements.mainPanel = mainPanel
+end
+
+function UIManager:createTrackingHeader(parent)
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, -20, 0, 35)
+    header.Position = UDim2.new(0, 10, 0, 10)
+    header.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
+    header.BorderSizePixel = 0
+    header.Parent = parent
+    
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 8)
+    headerCorner.Parent = header
+    
+    local columns = {
+        {text = "Character", width = 0.3, align = "Left"},
+        {text = "Status", width = 0.12, align = "Center"},
+        {text = "Current", width = 0.1, align = "Center"},
+        {text = "Total", width = 0.1, align = "Center"},
+        {text = "Session", width = 0.1, align = "Center"},
+        {text = "Last Seen", width = 0.15, align = "Center"},
+        {text = "Priority", width = 0.13, align = "Center"}
+    }
+    
+    local xOffset = 0
+    for _, col in ipairs(columns) do
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(col.width, -5, 1, 0)
+        label.Position = UDim2.new(xOffset, 5, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = col.text
+        label.TextColor3 = Color3.fromRGB(200, 200, 255)
+        label.Font = Enum.Font.GothamBold
+        label.TextSize = 11
+        label.TextXAlignment = col.align == "Left" and Enum.TextXAlignment.Left or Enum.TextXAlignment.Center
+        label.Parent = header
         
-        for i, charName in ipairs(characterNames) do
-            local charData = COMPLETE_DATABASE[charName]
+        xOffset = xOffset + col.width
+    end
+end
+
+function UIManager:createTrackingArea(parent)
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Name = "TrackingScroll"
+    scrollFrame.Size = UDim2.new(1, -20, 1, -55)
+    scrollFrame.Position = UDim2.new(0, 10, 0, 45)
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.BorderSizePixel = 0
+    scrollFrame.ScrollBarThickness = 8
+    scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scrollFrame.Parent = parent
+    
+    self.elements.trackingScroll = scrollFrame
+    self.elements.trackingRows = {}
+    
+    self:populateTrackingRows()
+end
+
+function UIManager:populateTrackingRows()
+    local scrollFrame = self.elements.trackingScroll
+    local rowHeight = 30
+    local visibleRows = 0
+    
+    for _, charName in ipairs(characterNames) do
+        local charData = COMPLETE_DATABASE[charName]
+        local trackData = gameData.characters[charName]
+        
+        if trackData.enabled then
+            local row = Instance.new("Frame")
+            row.Name = charName:gsub("%s+", "_") .. "_Row"
+            row.Size = UDim2.new(1, -5, 0, rowHeight - 2)
+            row.Position = UDim2.new(0, 0, 0, visibleRows * rowHeight)
+            row.BackgroundColor3 = visibleRows % 2 == 0 and Color3.fromRGB(30, 30, 42) or Color3.fromRGB(25, 25, 35)
+            row.BorderSizePixel = 0
+            row.Parent = scrollFrame
             
-            local itemFrame = Instance.new("Frame")
-            itemFrame.Name = charName:gsub("%s+", "_")
-            itemFrame.Size = UDim2.new(1, -10, 0, 32)
-            itemFrame.Position = UDim2.new(0, 5, 0, (i-1) * 34)
-            itemFrame.BackgroundColor3 = i % 2 == 0 and Color3.fromRGB(32, 32, 42) or Color3.fromRGB(28, 28, 38)
-            itemFrame.BorderSizePixel = 0
-            itemFrame.Parent = scrollFrame
-            
-            local itemCorner = Instance.new("UICorner")
-            itemCorner.CornerRadius = UDim.new(0, 6)
-            itemCorner.Parent = itemFrame
+            local rowCorner = Instance.new("UICorner")
+            rowCorner.CornerRadius = UDim.new(0, 6)
+            rowCorner.Parent = row
             
             local rarityStripe = Instance.new("Frame")
-            rarityStripe.Size = UDim2.new(0, 4, 1, 0)
+            rarityStripe.Size = UDim2.new(0, 3, 1, -4)
+            rarityStripe.Position = UDim2.new(0, 2, 0, 2)
             rarityStripe.BackgroundColor3 = RARITY_COLORS[charData.rarity]
             rarityStripe.BorderSizePixel = 0
-            rarityStripe.Parent = itemFrame
+            rarityStripe.Parent = row
             
             local stripeCorner = Instance.new("UICorner")
-            stripeCorner.CornerRadius = UDim.new(0, 2)
+            stripeCorner.CornerRadius = UDim.new(0, 1)
             stripeCorner.Parent = rarityStripe
             
-            local checkbox = Instance.new("TextButton")
-            checkbox.Size = UDim2.new(0, 20, 0, 20)
-            checkbox.Position = UDim2.new(0, 10, 0.5, -10)
-            checkbox.BackgroundColor3 = Color3.fromRGB(50, 205, 50)
-            checkbox.Text = "✓"
-            checkbox.TextColor3 = Color3.fromRGB(255, 255, 255)
-            checkbox.Font = Enum.Font.GothamBold
-            checkbox.TextSize = 12
-            checkbox.BorderSizePixel = 0
-            checkbox.Parent = itemFrame
-            
-            local checkCorner = Instance.new("UICorner")
-            checkCorner.CornerRadius = UDim.new(0, 4)
-            checkCorner.Parent = checkbox
-            
             local nameContainer = Instance.new("Frame")
-            nameContainer.Size = UDim2.new(1, -80, 1, 0)
-            nameContainer.Position = UDim2.new(0, 35, 0, 0)
+            nameContainer.Size = UDim2.new(0.3, -10, 1, 0)
+            nameContainer.Position = UDim2.new(0, 8, 0, 0)
             nameContainer.BackgroundTransparency = 1
-            nameContainer.Parent = itemFrame
+            nameContainer.Parent = row
             
             local displayName = charName
             if charData.mutation then
@@ -1381,661 +1638,388 @@ end
             end
             
             local nameLabel = Instance.new("TextLabel")
-            nameLabel.Size = UDim2.new(1, -25, 0.6, 0)
+            nameLabel.Size = UDim2.new(1, -20, 1, 0)
             nameLabel.BackgroundTransparency = 1
             nameLabel.Text = displayName
             nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
             nameLabel.Font = Enum.Font.Gotham
-            nameLabel.TextSize = 11
+            nameLabel.TextSize = 10
             nameLabel.TextXAlignment = Enum.TextXAlignment.Left
             nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
             nameLabel.Parent = nameContainer
             
-            local infoLabel = Instance.new("TextLabel")
-            infoLabel.Size = UDim2.new(1, -25, 0.4, 0)
-            infoLabel.Position = UDim2.new(0, 0, 0.6, 0)
-            infoLabel.BackgroundTransparency = 1
-            infoLabel.Text = charData.rarity .. " • Tier " .. charData.tier
-            infoLabel.TextColor3 = RARITY_COLORS[charData.rarity]
-            infoLabel.Font = Enum.Font.Gotham
-            infoLabel.TextSize = 9
-            infoLabel.TextXAlignment = Enum.TextXAlignment.Left
-            infoLabel.Parent = nameContainer
-            
             if charData.mutation then
-                local mutationIcon = Instance.new("Frame")
-                mutationIcon.Size = UDim2.new(0, 18, 0, 18)
-                mutationIcon.Position = UDim2.new(1, -22, 0.5, -9)
-                mutationIcon.BackgroundColor3 = MUTATION_COLORS[charData.mutation]
-                mutationIcon.BorderSizePixel = 0
-                mutationIcon.Parent = itemFrame
+                local mutIcon = Instance.new("Frame")
+                mutIcon.Size = UDim2.new(0, 12, 0, 12)
+                mutIcon.Position = UDim2.new(1, -15, 0.5, -6)
+                mutIcon.BackgroundColor3 = MUTATION_COLORS[charData.mutation]
+                mutIcon.BorderSizePixel = 0
+                mutIcon.Parent = nameContainer
                 
-                local mutationCorner = Instance.new("UICorner")
-                mutationCorner.CornerRadius = UDim.new(1, 0)
-                mutationCorner.Parent = mutationIcon
-                
-                local mutationLabel = Instance.new("TextLabel")
-                mutationLabel.Size = UDim2.new(1, 0, 1, 0)
-                mutationLabel.BackgroundTransparency = 1
-                mutationLabel.Text = charData.mutation:sub(1,1)
-                mutationLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
-                mutationLabel.Font = Enum.Font.GothamBold
-                mutationLabel.TextSize = 10
-                mutationLabel.Parent = mutationIcon
+                local mutCorner = Instance.new("UICorner")
+                mutCorner.CornerRadius = UDim.new(1, 0)
+                mutCorner.Parent = mutIcon
             end
             
-            self.elements.characterItems[charName] = {
-                frame = itemFrame,
-                checkbox = checkbox,
-                nameLabel = nameLabel,
-                infoLabel = infoLabel
+            local statusContainer = Instance.new("Frame")
+            statusContainer.Size = UDim2.new(0.12, 0, 1, 0)
+            statusContainer.Position = UDim2.new(0.3, 0, 0, 0)
+            statusContainer.BackgroundTransparency = 1
+            statusContainer.Parent = row
+            
+            local statusDot = Instance.new("Frame")
+            statusDot.Size = UDim2.new(0, 10, 0, 10)
+            statusDot.Position = UDim2.new(0.5, -5, 0.5, -5)
+            statusDot.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
+            statusDot.BorderSizePixel = 0
+            statusDot.Parent = statusContainer
+            
+            local dotCorner = Instance.new("UICorner")
+            dotCorner.CornerRadius = UDim.new(1, 0)
+            dotCorner.Parent = statusDot
+            
+            local columns = {
+                {name = "current", pos = 0.42, width = 0.1},
+                {name = "total", pos = 0.52, width = 0.1},
+                {name = "session", pos = 0.62, width = 0.1},
+                {name = "lastSeen", pos = 0.72, width = 0.15},
+                {name = "priority", pos = 0.87, width = 0.13}
             }
             
-            local isEnabled = gameData.characters[charName].enabled
-            checkbox.BackgroundColor3 = isEnabled and Color3.fromRGB(50, 205, 50) or Color3.fromRGB(120, 120, 120)
-            checkbox.Text = isEnabled and "✓" or ""
-    
-            -- ENHANCED: Checkbox now includes immediate auto-buy stop check
-            checkbox.MouseButton1Click:Connect(function()
-                local enabled = gameData.characters[charName].enabled
-                gameData.characters[charName].enabled = not enabled
+            local labels = {}
+            for _, col in ipairs(columns) do
+                local label = Instance.new("TextLabel")
+                label.Size = UDim2.new(col.width, -5, 1, 0)
+                label.Position = UDim2.new(col.pos, 0, 0, 0)
+                label.BackgroundTransparency = 1
+                label.Text = col.name == "priority" and string.format("%.1f", (10-charData.tier) * charData.multiplier) or "0"
+                label.TextColor3 = Color3.fromRGB(200, 200, 200)
+                label.Font = Enum.Font.Gotham
+                label.TextSize = 10
+                label.Parent = row
                 
-                checkbox.BackgroundColor3 = gameData.characters[charName].enabled and Color3.fromRGB(50, 205, 50) or Color3.fromRGB(120, 120, 120)
-                checkbox.Text = gameData.characters[charName].enabled and "✓" or ""
-                
-                -- NEW: If we just disabled a character and auto-buy is currently targeting it, stop immediately
-                if not gameData.characters[charName].enabled and AutoBuySystem.active and AutoBuySystem.currentTargetName == charName then
-                    AutoBuySystem.currentTarget = nil
-                    AutoBuySystem.currentTargetName = nil
-                    if humanoid then
-                        humanoid:MoveTo(humanoidRootPart.Position)
-                    end
-                    UIManager.elements.autoBuyStatus.Text = "Auto-Buy: Stopped - target disabled"
-                end
-                
-                self:updateTrackingCount()
-                self:updateMainPanel()
-                DataManager:save(gameData)
-            end)
-        end
-        
-        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #characterNames * 34)
-    end
-    
-    function UIManager:updateCharacterList()
-        if not self.elements.characterItems then return end
-        
-        local visibleCount = 0
-        local searchText = gameData.filters.searchText
-        local exactMatch = gameData.filters.exactMatch
-        local rarityFilter = gameData.filters.selectedRarity
-        local mutationFilter = gameData.filters.selectedMutation
-        local enabledOnly = gameData.filters.enabledOnly
-        
-        for _, charName in ipairs(characterNames) do
-            local item = self.elements.characterItems[charName]
-            if not item then continue end
-            
-            local charData = COMPLETE_DATABASE[charName]
-            local trackData = gameData.characters[charName]
-            local shouldShow = true
-            
-            if searchText ~= "" then
-                local nameToSearch = charName:lower()
-                local baseCharToSearch = charData.baseChar:lower()
-                
-                if exactMatch then
-                    shouldShow = (nameToSearch == searchText) or (baseCharToSearch == searchText) or (nameToSearch:find(searchText, 1, true))
-                else
-                    shouldShow = nameToSearch:find(searchText, 1, true) ~= nil or baseCharToSearch:find(searchText, 1, true) ~= nil
-                end
+                labels[col.name] = label
             end
             
-            if shouldShow and rarityFilter and rarityFilter ~= "All" then
-                shouldShow = charData.rarity == rarityFilter
-            end
+            self.elements.trackingRows[charName] = {
+                row = row,
+                statusDot = statusDot,
+                nameLabel = nameLabel,
+                labels = labels
+            }
             
-            if shouldShow and mutationFilter and mutationFilter ~= "All" then
-                if mutationFilter == "Base" then
-                    shouldShow = charData.mutation == nil
-                else
-                    shouldShow = charData.mutation == mutationFilter
-                end
-            end
-            
-            if shouldShow and enabledOnly then
-                shouldShow = trackData.enabled
-            end
-            
-            if shouldShow then
-                item.frame.Visible = true
-                item.frame.Position = UDim2.new(0, 5, 0, visibleCount * 34)
-                visibleCount = visibleCount + 1
-            else
-                item.frame.Visible = false
-            end
-        end
-        
-        GameState.trackingDisplayed = visibleCount
-        self.elements.characterCountLabel.Text = "Characters (" .. GameState.trackingDisplayed .. ")"
-        self.elements.characterScroll.CanvasSize = UDim2.new(0, 0, 0, visibleCount * 34)
-        self:updateFooter()
-    end
-    
-    function UIManager:createMainPanel()
-        local mainPanel = Instance.new("Frame")
-        mainPanel.Name = "MainPanel"
-        mainPanel.Size = UDim2.new(1, -350, 1, -110)
-        mainPanel.Position = UDim2.new(0, 340, 0, 70)
-        mainPanel.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
-        mainPanel.BorderSizePixel = 0
-        mainPanel.Parent = self.elements.mainFrame
-        
-        local panelCorner = Instance.new("UICorner")
-        panelCorner.CornerRadius = UDim.new(0, 12)
-        panelCorner.Parent = mainPanel
-        
-        local panelStroke = Instance.new("UIStroke")
-        panelStroke.Color = Color3.fromRGB(60, 60, 80)
-        panelStroke.Thickness = 1
-        panelStroke.Transparency = 0.6
-        panelStroke.Parent = mainPanel
-        
-        self:createTrackingHeader(mainPanel)
-        self:createTrackingArea(mainPanel)
-        
-        self.elements.mainPanel = mainPanel
-    end
-    
-    function UIManager:createTrackingHeader(parent)
-        local header = Instance.new("Frame")
-        header.Size = UDim2.new(1, -20, 0, 35)
-        header.Position = UDim2.new(0, 10, 0, 10)
-        header.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
-        header.BorderSizePixel = 0
-        header.Parent = parent
-        
-        local headerCorner = Instance.new("UICorner")
-        headerCorner.CornerRadius = UDim.new(0, 8)
-        headerCorner.Parent = header
-        
-        local columns = {
-            {text = "Character", width = 0.3, align = "Left"},
-            {text = "Status", width = 0.12, align = "Center"},
-            {text = "Current", width = 0.1, align = "Center"},
-            {text = "Total", width = 0.1, align = "Center"},
-            {text = "Session", width = 0.1, align = "Center"},
-            {text = "Last Seen", width = 0.15, align = "Center"},
-            {text = "Priority", width = 0.13, align = "Center"}
-        }
-        
-        local xOffset = 0
-        for _, col in ipairs(columns) do
-            local label = Instance.new("TextLabel")
-            label.Size = UDim2.new(col.width, -5, 1, 0)
-            label.Position = UDim2.new(xOffset, 5, 0, 0)
-            label.BackgroundTransparency = 1
-            label.Text = col.text
-            label.TextColor3 = Color3.fromRGB(200, 200, 255)
-            label.Font = Enum.Font.GothamBold
-            label.TextSize = 11
-            label.TextXAlignment = col.align == "Left" and Enum.TextXAlignment.Left or Enum.TextXAlignment.Center
-            label.Parent = header
-            
-            xOffset = xOffset + col.width
+            visibleRows = visibleRows + 1
         end
     end
     
-    function UIManager:createTrackingArea(parent)
-        local scrollFrame = Instance.new("ScrollingFrame")
-        scrollFrame.Name = "TrackingScroll"
-        scrollFrame.Size = UDim2.new(1, -20, 1, -55)
-        scrollFrame.Position = UDim2.new(0, 10, 0, 45)
-        scrollFrame.BackgroundTransparency = 1
-        scrollFrame.BorderSizePixel = 0
-        scrollFrame.ScrollBarThickness = 8
-        scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-        scrollFrame.Parent = parent
-        
-        self.elements.trackingScroll = scrollFrame
-        self.elements.trackingRows = {}
-        
-        self:populateTrackingRows()
-    end
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, visibleRows * rowHeight)
+end
+
+function UIManager:updateMainPanel()
+    if not self.elements.trackingScroll then return end
     
-    function UIManager:populateTrackingRows()
-        local scrollFrame = self.elements.trackingScroll
-        local rowHeight = 30
-        local visibleRows = 0
-        
-        for _, charName in ipairs(characterNames) do
-            local charData = COMPLETE_DATABASE[charName]
-            local trackData = gameData.characters[charName]
-            
-            if trackData.enabled then
-                local row = Instance.new("Frame")
-                row.Name = charName:gsub("%s+", "_") .. "_Row"
-                row.Size = UDim2.new(1, -5, 0, rowHeight - 2)
-                row.Position = UDim2.new(0, 0, 0, visibleRows * rowHeight)
-                row.BackgroundColor3 = visibleRows % 2 == 0 and Color3.fromRGB(30, 30, 42) or Color3.fromRGB(25, 25, 35)
-                row.BorderSizePixel = 0
-                row.Parent = scrollFrame
-                
-                local rowCorner = Instance.new("UICorner")
-                rowCorner.CornerRadius = UDim.new(0, 6)
-                rowCorner.Parent = row
-                
-                local rarityStripe = Instance.new("Frame")
-                rarityStripe.Size = UDim2.new(0, 3, 1, -4)
-                rarityStripe.Position = UDim2.new(0, 2, 0, 2)
-                rarityStripe.BackgroundColor3 = RARITY_COLORS[charData.rarity]
-                rarityStripe.BorderSizePixel = 0
-                rarityStripe.Parent = row
-                
-                local stripeCorner = Instance.new("UICorner")
-                stripeCorner.CornerRadius = UDim.new(0, 1)
-                stripeCorner.Parent = rarityStripe
-                
-                local nameContainer = Instance.new("Frame")
-                nameContainer.Size = UDim2.new(0.3, -10, 1, 0)
-                nameContainer.Position = UDim2.new(0, 8, 0, 0)
-                nameContainer.BackgroundTransparency = 1
-                nameContainer.Parent = row
-                
-                local displayName = charName
-                if charData.mutation then
-                    displayName = charData.mutation:sub(1,1) .. ". " .. charName:gsub("^" .. charData.mutation .. " ", "")
-                end
-                
-                local nameLabel = Instance.new("TextLabel")
-                nameLabel.Size = UDim2.new(1, -20, 1, 0)
-                nameLabel.BackgroundTransparency = 1
-                nameLabel.Text = displayName
-                nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                nameLabel.Font = Enum.Font.Gotham
-                nameLabel.TextSize = 10
-                nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-                nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-                nameLabel.Parent = nameContainer
-                
-                if charData.mutation then
-                    local mutIcon = Instance.new("Frame")
-                    mutIcon.Size = UDim2.new(0, 12, 0, 12)
-                    mutIcon.Position = UDim2.new(1, -15, 0.5, -6)
-                    mutIcon.BackgroundColor3 = MUTATION_COLORS[charData.mutation]
-                    mutIcon.BorderSizePixel = 0
-                    mutIcon.Parent = nameContainer
-                    
-                    local mutCorner = Instance.new("UICorner")
-                    mutCorner.CornerRadius = UDim.new(1, 0)
-                    mutCorner.Parent = mutIcon
-                end
-                
-                local statusContainer = Instance.new("Frame")
-                statusContainer.Size = UDim2.new(0.12, 0, 1, 0)
-                statusContainer.Position = UDim2.new(0.3, 0, 0, 0)
-                statusContainer.BackgroundTransparency = 1
-                statusContainer.Parent = row
-                
-                local statusDot = Instance.new("Frame")
-                statusDot.Size = UDim2.new(0, 10, 0, 10)
-                statusDot.Position = UDim2.new(0.5, -5, 0.5, -5)
-                statusDot.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
-                statusDot.BorderSizePixel = 0
-                statusDot.Parent = statusContainer
-                
-                local dotCorner = Instance.new("UICorner")
-                dotCorner.CornerRadius = UDim.new(1, 0)
-                dotCorner.Parent = statusDot
-                
-                local columns = {
-                    {name = "current", pos = 0.42, width = 0.1},
-                    {name = "total", pos = 0.52, width = 0.1},
-                    {name = "session", pos = 0.62, width = 0.1},
-                    {name = "lastSeen", pos = 0.72, width = 0.15},
-                    {name = "priority", pos = 0.87, width = 0.13}
-                }
-                
-                local labels = {}
-                for _, col in ipairs(columns) do
-                    local label = Instance.new("TextLabel")
-                    label.Size = UDim2.new(col.width, -5, 1, 0)
-                    label.Position = UDim2.new(col.pos, 0, 0, 0)
-                    label.BackgroundTransparency = 1
-                    label.Text = col.name == "priority" and string.format("%.1f", (10-charData.tier) * charData.multiplier) or "0"
-                    label.TextColor3 = Color3.fromRGB(200, 200, 200)
-                    label.Font = Enum.Font.Gotham
-                    label.TextSize = 10
-                    label.Parent = row
-                    
-                    labels[col.name] = label
-                end
-                
-                self.elements.trackingRows[charName] = {
-                    row = row,
-                    statusDot = statusDot,
-                    nameLabel = nameLabel,
-                    labels = labels
-                }
-                
-                visibleRows = visibleRows + 1
-            end
-        end
-        
-        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, visibleRows * rowHeight)
-    end
-    
-    function UIManager:updateMainPanel()
-        if not self.elements.trackingScroll then return end
-        
-        for _, child in pairs(self.elements.trackingScroll:GetChildren()) do
-            if child:IsA("Frame") then
-                child:Destroy()
-            end
-        end
-        
-        self.elements.trackingRows = {}
-        self:populateTrackingRows()
-    end
-    
-    function UIManager:createFooter()
-        local footer = Instance.new("Frame")
-        footer.Name = "Footer"
-        footer.Size = UDim2.new(1, 0, 0, 40)
-        footer.Position = UDim2.new(0, 0, 1, -40)
-        footer.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
-        footer.BorderSizePixel = 0
-        footer.Parent = self.elements.mainFrame
-        
-        local footerCorner = Instance.new("UICorner")
-        footerCorner.CornerRadius = UDim.new(0, 16)
-        footerCorner.Parent = footer
-        
-        local cornerFix = Instance.new("Frame")
-        cornerFix.Size = UDim2.new(1, 0, 0, 16)
-        cornerFix.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
-        cornerFix.BorderSizePixel = 0
-        cornerFix.Parent = footer
-        
-        local statusContainer = Instance.new("Frame")
-        statusContainer.Size = UDim2.new(1, -40, 1, -10)
-        statusContainer.Position = UDim2.new(0, 20, 0, 5)
-        statusContainer.BackgroundTransparency = 1
-        statusContainer.Parent = footer
-        
-        local statusItems = {
-            {name = "lastUpdate", text = "Updated: Now", pos = 0},
-            {name = "sessionInfo", text = "Session: 0m", pos = 0.2},
-            {name = "autoBuyStatus", text = "Auto-Buy: Idle", pos = 0.4},
-            {name = "performance", text = "FPS: 60", pos = 0.65},
-            {name = "tracking", text = "Tracking: 0/0", pos = 0.8}
-        }
-        
-        for _, item in ipairs(statusItems) do
-            local label = Instance.new("TextLabel")
-            label.Name = item.name
-            label.Size = UDim2.new(0.2, -10, 1, 0)
-            label.Position = UDim2.new(item.pos, 0, 0, 0)
-            label.BackgroundTransparency = 1
-            label.Text = item.text
-            label.TextColor3 = Color3.fromRGB(150, 150, 170)
-            label.Font = Enum.Font.Gotham
-            label.TextSize = 10
-            label.TextXAlignment = Enum.TextXAlignment.Left
-            label.Parent = statusContainer
-            
-            self.elements[item.name] = label
+    for _, child in pairs(self.elements.trackingScroll:GetChildren()) do
+        if child:IsA("Frame") then
+            child:Destroy()
         end
     end
     
-    function UIManager:makeDraggable()
-        local frame = self.elements.mainFrame
-        local handle = self.elements.header
-        
-        local dragging = false
-        local dragInput, dragStart, startPos
-        
-        local function update(input)
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-        
-        handle.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = true
-                dragStart = input.Position
-                startPos = frame.Position
-                
-                input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then
-                        dragging = false
-                    end
-                end)
-            end
-        end)
-        
-        handle.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement then
-                dragInput = input
-            end
-        end)
-        
-        Services.UserInputService.InputChanged:Connect(function(input)
-            if input == dragInput and dragging then
-                update(input)
-            end
-        end)
-    end
+    self.elements.trackingRows = {}
+    self:populateTrackingRows()
+end
+
+function UIManager:createFooter()
+    local footer = Instance.new("Frame")
+    footer.Name = "Footer"
+    footer.Size = UDim2.new(1, 0, 0, 40)
+    footer.Position = UDim2.new(0, 0, 1, -40)
+    footer.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
+    footer.BorderSizePixel = 0
+    footer.Parent = self.elements.mainFrame
     
-    function UIManager:updateTrackingCount()
-        local enabledCount = 0
-        local totalCount = 0
-        
-        for _, charName in ipairs(characterNames) do
-            local trackData = gameData.characters[charName]
-            if trackData.enabled then
-                enabledCount = enabledCount + 1
-            end
-            totalCount = totalCount + 1
-        end
-        
-        GameState.trackingEnabled = enabledCount
-        GameState.trackingTotal = totalCount
-        self:updateFooter()
-    end
+    local footerCorner = Instance.new("UICorner")
+    footerCorner.CornerRadius = UDim.new(0, 16)
+    footerCorner.Parent = footer
     
-    function UIManager:updateFooter()
-        if self.elements.lastUpdate then
-            self.elements.lastUpdate.Text = "Updated: " .. os.date("%X", GameState.lastUpdateTime)
-        end
-        
-        if self.elements.sessionInfo then
-            local now = os.time()
-            local sessionTime = now - GameState.joinTime
-            
-            local hours = math.floor(sessionTime / 3600)
-            local minutes = math.floor((sessionTime % 3600) / 60)
-            local seconds = sessionTime % 60
-            
-            if hours > 0 then
-                self.elements.sessionInfo.Text = string.format("Session: %dh %dm %ds", hours, minutes, seconds)
-            elseif minutes > 0 then
-                self.elements.sessionInfo.Text = string.format("Session: %dm %ds", minutes, seconds)
-            else
-                self.elements.sessionInfo.Text = string.format("Session: %ds", seconds)
-            end
-        end
-        
-        if self.elements.performance then
-            self.elements.performance.Text = string.format("FPS: %d", math.floor(GameState.averageFPS))
-        end
-        
-        if self.elements.tracking then
-            self.elements.tracking.Text = string.format("Tracking: %d/%d", GameState.trackingEnabled, GameState.trackingDisplayed)
-        end
-    end
+    local cornerFix = Instance.new("Frame")
+    cornerFix.Size = UDim2.new(1, 0, 0, 16)
+    cornerFix.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
+    cornerFix.BorderSizePixel = 0
+    cornerFix.Parent = footer
     
-    -- ENHANCED Character Tracking System
-    local CharacterTracker = {
-        instances = {},
-        previousCounts = {},
-        scanCache = {},
-        lastScan = 0
+    local statusContainer = Instance.new("Frame")
+    statusContainer.Size = UDim2.new(1, -40, 1, -10)
+    statusContainer.Position = UDim2.new(0, 20, 0, 5)
+    statusContainer.BackgroundTransparency = 1
+    statusContainer.Parent = footer
+    
+    local statusItems = {
+        {name = "lastUpdate", text = "Updated: Now", pos = 0},
+        {name = "sessionInfo", text = "Session: 0m", pos = 0.2},
+        {name = "autoBuyStatus", text = "Auto-Buy: Idle", pos = 0.4},
+        {name = "performance", text = "FPS: 60", pos = 0.65},
+        {name = "tracking", text = "Tracking: 0/0", pos = 0.8}
     }
     
-    function CharacterTracker:scanWorkspace()
-        local now = tick()
-        if now - self.lastScan < 0.1 then
-            return self.scanCache
-        end
+    for _, item in ipairs(statusItems) do
+        local label = Instance.new("TextLabel")
+        label.Name = item.name
+        label.Size = UDim2.new(0.2, -10, 1, 0)
+        label.Position = UDim2.new(item.pos, 0, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = item.text
+        label.TextColor3 = Color3.fromRGB(150, 150, 170)
+        label.Font = Enum.Font.Gotham
+        label.TextSize = 10
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = statusContainer
         
-        self.lastScan = now
-        self.scanCache = {}
-        
-        local workspaceChildren = workspace:GetChildren()
-        for _, obj in pairs(workspaceChildren) do
-            if obj:IsA("Model") and COMPLETE_DATABASE[obj.Name] then
-                if not self.scanCache[obj.Name] then
-                    self.scanCache[obj.Name] = {}
+        self.elements[item.name] = label
+    end
+end
+
+function UIManager:makeDraggable()
+    local frame = self.elements.mainFrame
+    local handle = self.elements.header
+    
+    local dragging = false
+    local dragInput, dragStart, startPos
+    
+    local function update(input)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+    
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
                 end
-                table.insert(self.scanCache[obj.Name], obj)
-            end
+            end)
         end
+    end)
+    
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+    
+    Services.UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+end
+
+function UIManager:updateTrackingCount()
+    local enabledCount = 0
+    local totalCount = 0
+    
+    for _, charName in ipairs(characterNames) do
+        local trackData = gameData.characters[charName]
+        if trackData.enabled then
+            enabledCount = enabledCount + 1
+        end
+        totalCount = totalCount + 1
+    end
+    
+    GameState.trackingEnabled = enabledCount
+    GameState.trackingTotal = totalCount
+    self:updateFooter()
+end
+
+function UIManager:updateFooter()
+    if self.elements.lastUpdate then
+        self.elements.lastUpdate.Text = "Updated: " .. os.date("%X", GameState.lastUpdateTime)
+    end
+    
+    if self.elements.sessionInfo then
+        local now = os.time()
+        local sessionTime = now - GameState.joinTime
         
+        local hours = math.floor(sessionTime / 3600)
+        local minutes = math.floor((sessionTime % 3600) / 60)
+        local seconds = sessionTime % 60
+        
+        if hours > 0 then
+            self.elements.sessionInfo.Text = string.format("Session: %dh %dm %ds", hours, minutes, seconds)
+        elseif minutes > 0 then
+            self.elements.sessionInfo.Text = string.format("Session: %dm %ds", minutes, seconds)
+        else
+            self.elements.sessionInfo.Text = string.format("Session: %ds", seconds)
+        end
+    end
+    
+    if self.elements.performance then
+        self.elements.performance.Text = string.format("FPS: %d", math.floor(GameState.averageFPS))
+    end
+    
+    if self.elements.tracking then
+        self.elements.tracking.Text = string.format("Tracking: %d/%d", GameState.trackingEnabled, GameState.trackingDisplayed)
+    end
+end
+
+local CharacterTracker = {
+    instances = {},
+    previousCounts = {},
+    scanCache = {},
+    lastScan = 0
+}
+
+function CharacterTracker:scanWorkspace()
+    local now = tick()
+    if now - self.lastScan < 0.1 then
         return self.scanCache
     end
     
-    -- ENHANCED: Character state updates with auto-buy triggering
-    function CharacterTracker:updateCharacterStates()
-        local now = tick()
-        local currentChars = self:scanWorkspace()
-        local anyNewSpawns = false
-        
-        GameState.lastUpdateTime = os.time()
-        
-        for _, charName in ipairs(characterNames) do
-            local instances = currentChars[charName] or {}
-            local count = #instances
-            local trackData = gameData.characters[charName]
-            local charData = COMPLETE_DATABASE[charName]
-            
-            local wasPresent = trackData.status == "present"
-            local isPresent = count > 0
-            
-            -- NEW: Check for new spawns and trigger auto-buy if conditions are met
-            if isPresent and not wasPresent and trackData.enabled and GameState.scriptActive then
-                anyNewSpawns = true
-                trackData.sessionSpawns = trackData.sessionSpawns + 1
-                gameData.analytics.totalSpawns = gameData.analytics.totalSpawns + 1
-                
-                SoundManager:playSpawnAlert(charData.rarity, charData.mutation)
-                
-                -- NEW: Auto-trigger auto-buy for high priority characters
-                if not AutoBuySystem.active and AutoBuySystem:shouldAutoTrigger(charName, charData) then
-                    AutoBuySystem:triggerOnSpawn(charName)
-                end
+    self.lastScan = now
+    self.scanCache = {}
+    
+    local workspaceChildren = workspace:GetChildren()
+    for _, obj in pairs(workspaceChildren) do
+        if obj:IsA("Model") and COMPLETE_DATABASE[obj.Name] then
+            if not self.scanCache[obj.Name] then
+                self.scanCache[obj.Name] = {}
             end
-            
-            if isPresent then
-                trackData.status = "present"
-                trackData.currentCount = count
-                trackData.lastSeen = os.time()
-                
-                if count > (self.previousCounts[charName] or 0) then
-                    trackData.totalSeen = trackData.totalSeen + (count - (self.previousCounts[charName] or 0))
-                end
-                
-                trackData.totalTime = trackData.totalTime + (now - trackData.lastSeen)
-            else
-                if wasPresent then
-                    trackData.status = "absent"
-                    trackData.currentCount = 0
-                end
-            end
-            
-            self.previousCounts[charName] = count
-            
-            if trackData.enabled then
-                self:updateCharacterUI(charName)
-            end
+            table.insert(self.scanCache[obj.Name], obj)
         end
-        
-        if anyNewSpawns then
-            DataManager:save(gameData, true)
-        end
-        
-        UIManager:updateFooter()
     end
     
-    function CharacterTracker:updateCharacterUI(charName)
+    return self.scanCache
+end
+
+function CharacterTracker:updateCharacterStates()
+    local now = tick()
+    local currentChars = self:scanWorkspace()
+    local anyNewSpawns = false
+    
+    GameState.lastUpdateTime = os.time()
+    
+    for _, charName in ipairs(characterNames) do
+        local instances = currentChars[charName] or {}
+        local count = #instances
         local trackData = gameData.characters[charName]
         local charData = COMPLETE_DATABASE[charName]
-        local row = UIManager.elements.trackingRows[charName]
         
-        if not row then return end
+        local wasPresent = trackData.status == "present"
+        local isPresent = count > 0
         
-        local statusColor
-        if trackData.status == "present" then
-            statusColor = Color3.fromRGB(76, 175, 80)
-        elseif trackData.status == "absent" then
-            statusColor = Color3.fromRGB(244, 67, 54)
-        else
-            statusColor = Color3.fromRGB(158, 158, 158)
-        end
-        
-        row.statusDot.BackgroundColor3 = statusColor
-        
-        row.labels.current.Text = tostring(trackData.currentCount)
-        row.labels.total.Text = tostring(trackData.totalSeen)
-        row.labels.session.Text = tostring(trackData.sessionSpawns)
-        
-        if trackData.lastSeen > 0 then
-            local elapsed = os.time() - trackData.lastSeen
-            if elapsed < 60 then
-                row.labels.lastSeen.Text = string.format("%ds", elapsed)
-            elseif elapsed < 3600 then
-                row.labels.lastSeen.Text = string.format("%dm", math.floor(elapsed / 60))
-            else
-                row.labels.lastSeen.Text = string.format("%dh", math.floor(elapsed / 3600))
+        if isPresent and not wasPresent and trackData.enabled and GameState.scriptActive then
+            anyNewSpawns = true
+            trackData.sessionSpawns = trackData.sessionSpawns + 1
+            gameData.analytics.totalSpawns = gameData.analytics.totalSpawns + 1
+            
+            SoundManager:playSpawnAlert(charData.rarity, charData.mutation)
+            
+            if not AutoBuySystem.active and AutoBuySystem:shouldAutoTrigger(charName, charData) then
+                AutoBuySystem:triggerOnSpawn(charName)
             end
-        else
-            row.labels.lastSeen.Text = "Never"
         end
         
-        row.labels.priority.Text = string.format("%.1f", (10-charData.tier) * charData.multiplier)
+        if isPresent then
+            trackData.status = "present"
+            trackData.currentCount = count
+            trackData.lastSeen = os.time()
+            
+            if count > (self.previousCounts[charName] or 0) then
+                trackData.totalSeen = trackData.totalSeen + (count - (self.previousCounts[charName] or 0))
+            end
+            
+            trackData.totalTime = trackData.totalTime + (now - trackData.lastSeen)
+        else
+            if wasPresent then
+                trackData.status = "absent"
+                trackData.currentCount = 0
+            end
+        end
+        
+        self.previousCounts[charName] = count
+        
+        if trackData.enabled then
+            self:updateCharacterUI(charName)
+        end
     end
     
-    -- Initialization
-    local function initialize()
-        print("[HaikyuuTracker] Initializing Enhanced Auto-Buy Edition...")
-        gameData = DataManager:load()
-        GameState.trackingTotal = #characterNames
-        UIManager:create()
-        UIManager:updateTrackingCount()
-        UIManager:updateCharacterList()
-        GameState.scriptActive = true
+    if anyNewSpawns then
+        DataManager:save(gameData, true)
+    end
+    
+    UIManager:updateFooter()
+end
+
+function CharacterTracker:updateCharacterUI(charName)
+    local trackData = gameData.characters[charName]
+    local charData = COMPLETE_DATABASE[charName]
+    local row = UIManager.elements.trackingRows[charName]
+    
+    if not row then return end
+    
+    local statusColor
+    if trackData.status == "present" then
+        statusColor = Color3.fromRGB(76, 175, 80)
+    elseif trackData.status == "absent" then
+        statusColor = Color3.fromRGB(244, 67, 54)
+    else
+        statusColor = Color3.fromRGB(158, 158, 158)
+    end
+    
+    row.statusDot.BackgroundColor3 = statusColor
+    
+    row.labels.current.Text = tostring(trackData.currentCount)
+    row.labels.total.Text = tostring(trackData.totalSeen)
+    row.labels.session.Text = tostring(trackData.sessionSpawns)
+    
+    if trackData.lastSeen > 0 then
+        local elapsed = os.time() - trackData.lastSeen
+        if elapsed < 60 then
+            row.labels.lastSeen.Text = string.format("%ds", elapsed)
+        elseif elapsed < 3600 then
+            row.labels.lastSeen.Text = string.format("%dm", math.floor(elapsed / 60))
+        else
+            row.labels.lastSeen.Text = string.format("%dh", math.floor(elapsed / 3600))
+        end
+    else
+        row.labels.lastSeen.Text = "Never"
+    end
+    
+    row.labels.priority.Text = string.format("%.1f", (10-charData.tier) * charData.multiplier)
+end
+
+local function initialize()
+    print("[VolleyballVision] Initializing...")
+    gameData = DataManager:load()
+    GameState.trackingTotal = #characterNames
+    UIManager:create()
+    UIManager:updateTrackingCount()
+    UIManager:updateCharacterList()
+    GameState.scriptActive = true
+    CharacterTracker:updateCharacterStates()
+    print("[VolleyballVision] Initialization complete.")
+    print("[VolleyballVision] Auto-trigger enabled: " .. tostring(gameData.settings.autoTriggerOnSpawn))
+    print("[VolleyballVision] Tracking " .. GameState.trackingEnabled .. " characters.")
+end
+
+local function mainUpdate(deltaTime)
+    local now = tick()
+    if now - GameState.lastUpdate >= CONFIG.UPDATE_INTERVAL and GameState.scriptActive then
+        GameState.lastUpdate = now
         CharacterTracker:updateCharacterStates()
-        print("[HaikyuuTracker] Enhanced Auto-Buy initialization complete.")
-        print("[HaikyuuTracker] Auto-trigger enabled: " .. tostring(gameData.settings.autoTriggerOnSpawn))
-        print("[HaikyuuTracker] Tracking " .. GameState.trackingEnabled .. " characters.")
-    end
-    
-    local function mainUpdate(deltaTime)
-        local now = tick()
-        if now - GameState.lastUpdate >= CONFIG.UPDATE_INTERVAL and GameState.scriptActive then
-            GameState.lastUpdate = now
-            CharacterTracker:updateCharacterStates()
-            if now % CONFIG.SAVE_INTERVAL < CONFIG.UPDATE_INTERVAL then
-                DataManager:save(gameData)
-            end
+        if now % CONFIG.SAVE_INTERVAL < CONFIG.UPDATE_INTERVAL then
+            DataManager:save(gameData)
         end
-        PerformanceMonitor:update(deltaTime)
     end
-    
-    Services.RunService.Heartbeat:Connect(function(deltaTime)
-        mainUpdate(deltaTime)
-    end)
-    
-    task.wait(2)
-    initialize()
+    PerformanceMonitor:update(deltaTime)
+end
+
+Services.RunService.Heartbeat:Connect(function(deltaTime)
+    mainUpdate(deltaTime)
+end)
+
+task.wait(2)
+initialize()
