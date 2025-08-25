@@ -311,31 +311,6 @@
             lastTargetUpdate = 0
         }
 
-        -- Position player in front of target character for optimal purchasing
-        local function positionPlayerInFrontOfTarget(localPlayer, targetCharacter)
-            local torso = targetCharacter:FindFirstChild("Torso") or targetCharacter:FindFirstChild("HumanoidRootPart")
-            if not torso then return false end
-            
-            -- Get target position and calculate position in front
-            local targetPos = torso.Position
-            local targetCFrame = torso.CFrame
-            local lookVector = targetCFrame.LookVector
-            
-            -- Position 10 studs in front of the target
-            local newPos = targetPos - (lookVector * 10)
-            
-            -- Move player
-            localPlayer.Character:MoveTo(newPos)
-            
-            -- Face the torso
-            local hrp = localPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                hrp.CFrame = CFrame.new(hrp.Position, targetPos)
-            end
-            
-            return true
-        end
-
         -- Attempt to purchase a character using proximity prompts
         local function attemptPurchase(localPlayer, targetCharacter)
             -- Position & face before buying
