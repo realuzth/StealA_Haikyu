@@ -302,174 +302,407 @@
             end
         end
 
-        -- Auto Buy System
-        local AutoBuySystem = {
-            active = false,
-            currentTarget = nil,
-            currentTargetName = nil,
-            purchasing = false,
-            lastTargetUpdate = 0
+-- Auto Buy System with purchase tracking - FIXED VERSION
+local AutoBuySystem = {
+    active = false,
+    currentTarget = nil,
+    currentTargetName = nil,
+    purchasing = false,
+    lastTargetUpdate = 0,
+    purchasedCharacters = {}, -- Track purchased character instances
+    purchaseInProgress = {} -- Track characters currently being purchased
+}
+
+-- Helper function to get unique character identifier - IMPROVED
+local function getCharacterUID(character)
+    if not character or not character.Parent then return nil end
+    
+    -- Use a combination of creation time, position, and parent for better uniqueness
+    local creationTime = character:GetAttribute("CreationTime")
+    if not creationTime then
+        local success, guid = pcall(function()
+            return Services.HttpService:GenerateGUID(false)
+        end)
+        
+        if success then
+            creationTime = guid
+        else
+            -- Better fallback using multiple factors
+            local pos = character:FindFirstChild("HumanoidRootPart")
+            local posString = pos and string.format("%.2f_%.2f_%.2f", pos.Position.X, pos.Position.Y, pos.Position.Z) or "nopos"
+            creationTime = tostring(tick()) .. "_" .. posString .. "_" .. tostring(math.random(10000, 99999))
+        end
+        
+        pcall(function()
+            character:SetAttribute("CreationTime", creationTime)
+        end)
+    end
+    
+    return character.Name .. "_" .. tostring(creationTime)
+end
+
+-- Check if character has already been purchased - IMPROVED
+local function isCharacterPurchased(character)
+    local uid = getCharacterUID(character)
+    if not uid then return false end
+    
+    -- Check if already purchased
+    local purchaseData = AutoBuySystem.purchasedCharacters[uid]
+    if purchaseData then
+        if type(purchaseData) == "table" then
+            return true
+        elseif type(purchaseData) == "boolean" then
+            return purchaseData
+        end
+    end
+    
+    -- Check if purchase is in progress
+    if AutoBuySystem.purchaseInProgress[uid] then
+        return true -- Treat as purchased to prevent duplicate attempts
+    end
+    
+    return false
+end
+
+-- Mark character as purchased - IMPROVED
+local function markCharacterPurchased(character, success)
+    local uid = getCharacterUID(character)
+    if not uid then return end
+    
+    if success then
+        AutoBuySystem.purchasedCharacters[uid] = {
+            timestamp = tick(),
+            characterName = character.Name,
+            purchaseTime = os.time()
         }
-
-        -- Attempt to purchase a character using proximity prompts
-        local function attemptPurchase(localPlayer, targetCharacter)
-            -- Position & face before buying
-            if not positionPlayerInFrontOfTarget(localPlayer, targetCharacter) then
-                return false
+        
+        -- Clean up purchase progress tracking
+        AutoBuySystem.purchaseInProgress[uid] = nil
+        
+        print("✅ Successfully purchased: " .. character.Name)
+        
+        -- Enhanced cleanup with staggered removal
+        spawn(function()
+            task.wait(300) -- Keep for 5 minutes
+            if AutoBuySystem.purchasedCharacters[uid] then
+                AutoBuySystem.purchasedCharacters[uid] = nil
             end
+        end)
+    else
+        -- If purchase failed, remove from progress tracking so it can be retried
+        AutoBuySystem.purchaseInProgress[uid] = nil
+        print("❌ Failed to purchase: " .. character.Name)
+    end
+    
+    -- Periodic cleanup of old entries
+    local currentTime = tick()
+    for storedUID, data in pairs(AutoBuySystem.purchasedCharacters) do
+        if type(data) == "table" and data.timestamp and (currentTime - data.timestamp) > 600 then
+            AutoBuySystem.purchasedCharacters[storedUID] = nil
+        end
+    end
+end
 
-            -- Wait a moment for positioning to complete
-            task.wait(0.5)
+-- Mark character as being purchased (prevent race conditions) - NEW
+local function markCharacterInProgress(character)
+    local uid = getCharacterUID(character)
+    if not uid then return false end
+    
+    -- Check if already in progress
+    if AutoBuySystem.purchaseInProgress[uid] then
+        return false -- Already being purchased
+    end
+    
+    AutoBuySystem.purchaseInProgress[uid] = {
+        timestamp = tick(),
+        characterName = character.Name
+    }
+    
+    -- Cleanup progress tracking after timeout
+    spawn(function()
+        task.wait(15) -- 15 second timeout for purchase attempts
+        if AutoBuySystem.purchaseInProgress[uid] then
+            AutoBuySystem.purchaseInProgress[uid] = nil
+        end
+    end)
+    
+    return true
+end
+
+-- Attempt to purchase a character using proximity prompts - COMPLETELY REWRITTEN
+local function attemptPurchase(localPlayer, targetCharacter)
+    if not targetCharacter or not targetCharacter.Parent then
+        return false
+    end
+    
+    -- Check if already purchased or in progress
+    if isCharacterPurchased(targetCharacter) then
+        return false
+    end
+    
+    -- Mark as in progress to prevent race conditions
+    if not markCharacterInProgress(targetCharacter) then
+        return false -- Already being purchased
+    end
+    
+    print("🛒 Attempting to purchase: " .. targetCharacter.Name)
+    
+    -- Find the torso/HumanoidRootPart
+    local torso = targetCharacter:FindFirstChild("Torso") or targetCharacter:FindFirstChild("HumanoidRootPart")
+    if not torso then 
+        warn("[AutoBuy] No torso/HumanoidRootPart found on target: " .. targetCharacter.Name)
+        markCharacterPurchased(targetCharacter, false)
+        return false 
+    end
+    
+    -- Find proximity prompt with multiple attempts
+    local prompt = torso:FindFirstChild("BuyPrompt") or torso:FindFirstChild("BuyPromptOLD")
+    if not prompt or not prompt:IsA("ProximityPrompt") then
+        warn("[AutoBuy] No valid proximity prompt found on: " .. targetCharacter.Name)
+        markCharacterPurchased(targetCharacter, false)
+        return false
+    end
+    
+    -- Verify we're close enough
+    if humanoidRootPart and torso then
+        local distance = (humanoidRootPart.Position - torso.Position).Magnitude
+        if distance > CONFIG.AUTO_BUY_DISTANCE * 1.5 then -- Give some leeway
+            warn("[AutoBuy] Too far from target: " .. targetCharacter.Name .. " (distance: " .. math.floor(distance) .. ")")
+            markCharacterPurchased(targetCharacter, false)
+            return false
+        end
+    end
+    
+    -- Attempt to fire the prompt with better error handling
+    local purchaseSuccess = false
+    local attempts = 0
+    local maxAttempts = 3
+    
+    while attempts < maxAttempts and not purchaseSuccess do
+        attempts = attempts + 1
+        
+        local success = pcall(function()
+            fireproximityprompt(prompt)
+            purchaseSuccess = true
+        end)
+        
+        if success then
+            print("🎯 Purchase prompt fired for: " .. targetCharacter.Name .. " (attempt " .. attempts .. ")")
+            break
+        else
+            warn("[AutoBuy] Failed to fire proximity prompt for: " .. targetCharacter.Name .. " (attempt " .. attempts .. ")")
+            if attempts < maxAttempts then
+                task.wait(0.5) -- Brief delay before retry
+            end
+        end
+    end
+    
+    if purchaseSuccess then
+        markCharacterPurchased(targetCharacter, true)
+        return true
+    else
+        markCharacterPurchased(targetCharacter, false)
+        return false
+    end
+end
+
+function AutoBuySystem:isCurrentTargetEnabled()
+    if not self.currentTargetName then
+        return true
+    end
+    
+    return gameData.characters[self.currentTargetName] and gameData.characters[self.currentTargetName].enabled
+end
+
+function AutoBuySystem:toggle()
+    self.active = not self.active
+    gameData.settings.autoBuyEnabled = self.active
+    
+    if self.active then
+        -- Enhanced cleanup when enabling
+        self.purchasedCharacters = {}
+        self.purchaseInProgress = {}
+        spawn(function() self:mainLoop() end)
+        print("🤖 Auto Buy system ENABLED")
+    else
+        self.currentTarget = nil
+        self.currentTargetName = nil
+        if humanoid then
+            humanoid:MoveTo(humanoidRootPart.Position)
+        end
+        -- Clear all tracking when disabling
+        self.purchasedCharacters = {}
+        self.purchaseInProgress = {}
+        print("🛑 Auto Buy system DISABLED")
+    end
+
+    if DataManager and DataManager.save then
+        DataManager:save(gameData)
+    end
+end
+
+function AutoBuySystem:findBestTarget()
+    local bestTarget = nil
+    local bestScore = -math.huge
+    local now = tick()
+    
+    -- Throttle target updates
+    if now - self.lastTargetUpdate < 0.8 then
+        return bestTarget, bestScore
+    end
+    
+    self.lastTargetUpdate = now
+    
+    for _, charName in ipairs(characterNames) do
+        local charData = COMPLETE_DATABASE[charName]
+        local trackData = gameData.characters[charName]
+        
+        if not trackData.enabled then continue end
+        
+        local target = workspace:FindFirstChild(charName)
+        if target and target:IsA("Model") and target:FindFirstChild("HumanoidRootPart") then
+            -- Skip if already purchased or being purchased
+            if isCharacterPurchased(target) then continue end
             
-            -- Trigger the correct prompt
-            local torso = targetCharacter:FindFirstChild("Torso") or targetCharacter:FindFirstChild("HumanoidRootPart")
-            if not torso then return false end
+            -- Verify target has a valid purchase prompt
+            local torso = target:FindFirstChild("Torso") or target:FindFirstChild("HumanoidRootPart")
+            if not torso then continue end
             
             local prompt = torso:FindFirstChild("BuyPrompt") or torso:FindFirstChild("BuyPromptOLD")
-            if prompt and prompt:IsA("ProximityPrompt") then
-                fireproximityprompt(prompt)
-                return true
-            end
+            if not prompt or not prompt:IsA("ProximityPrompt") then continue end
             
-            return false
-        end
-
-        function AutoBuySystem:isCurrentTargetEnabled()
-            if not self.currentTargetName then
-                return true
-            end
+            local distance = (humanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude
             
-            return gameData.characters[self.currentTargetName] and gameData.characters[self.currentTargetName].enabled
-        end
-
-        function AutoBuySystem:toggle()
-            self.active = not self.active
-            gameData.settings.autoBuyEnabled = self.active
+            -- Enhanced scoring system
+            local rarityScore = (10 - charData.tier) * 100
+            local mutationBonus = charData.mutation == "Diamond" and 500 or charData.mutation == "Golden" and 250 or 0
+            local distancePenalty = distance * 3
             
-            if self.active then
-                spawn(function() self:mainLoop() end)
-            else
-                self.currentTarget = nil
-                self.currentTargetName = nil
-                if humanoid then
-                    humanoid:MoveTo(humanoidRootPart.Position)
-                end
-            end
-
-            if DataManager and DataManager.save then
-                DataManager:save(gameData)
+            -- Bonus for closer targets
+            local proximityBonus = math.max(0, (50 - distance) * 2)
+            
+            local score = rarityScore + mutationBonus + proximityBonus - distancePenalty
+            
+            if score > bestScore then
+                bestScore = score
+                bestTarget = target
             end
         end
+    end
+    
+    return bestTarget, bestScore
+end
 
-        function AutoBuySystem:findBestTarget()
-            local bestTarget = nil
-            local bestScore = -math.huge
-            local now = tick()
-            
-            if now - self.lastTargetUpdate < 0.5 then
-                return bestTarget, bestScore
-            end
-            
-            self.lastTargetUpdate = now
-            
-            for _, charName in ipairs(characterNames) do
-                local charData = COMPLETE_DATABASE[charName]
-                local trackData = gameData.characters[charName]
-                
-                if not trackData.enabled then continue end
-                
-                local target = workspace:FindFirstChild(charName)
-                if target and target:IsA("Model") and target:FindFirstChild("HumanoidRootPart") then
-                    local distance = (humanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude
-                    
-                    local rarityScore = (10 - charData.tier) * 100
-                    local mutationBonus = charData.mutation == "Diamond" and 500 or charData.mutation == "Golden" and 250 or 0
-                    local distancePenalty = distance * 5
-                    
-                    local score = rarityScore + mutationBonus - distancePenalty
-                    
-                    if score > bestScore then
-                        bestScore = score
-                        bestTarget = target
-                    end
-                end
-            end
-            
-            return bestTarget, bestScore
-        end
+function AutoBuySystem:followTarget(target)
+    if not target or not target.Parent then return false end
+    if isCharacterPurchased(target) then return false end
 
-        function AutoBuySystem:followTarget(target)
-            if not target or not target.Parent then return false end
+    if humanoid and humanoid.WalkSpeed ~= 21 then
+        humanoid.WalkSpeed = 21
+    end
 
-            if humanoid and humanoid.WalkSpeed ~= 21 then
-                humanoid.WalkSpeed = 21
-            end
+    local startTime = tick()
+    local targetName = target.Name
+    self.currentTargetName = targetName
 
-            local startTime = tick()
-            local targetName = target.Name
-            self.currentTargetName = targetName
+    print("🎯 Following target: " .. targetName)
 
-            while self.active and target.Parent and (tick() - startTime) < CONFIG.MAX_FOLLOW_TIME do
-                if not self:isCurrentTargetEnabled() then
-                    self.currentTarget = nil
-                    self.currentTargetName = nil
-                    if humanoid then
-                        humanoid:MoveTo(humanoidRootPart.Position)
-                    end
-                    return false
-                end
-
-                local distance = (humanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude
-
-                if distance <= CONFIG.AUTO_BUY_DISTANCE then
-                    -- Verify we're purchasing the correct target
-                    if target.Name ~= targetName then
-                        return false
-                    end
-                    
-                    local success = attemptPurchase(player, target)
-                    if success then
-                        task.wait(2)
-                        return true
-                    else
-                        task.wait(2)
-                        return false
-                    end
-                end
-
-                humanoid:MoveTo(target.HumanoidRootPart.Position)
-                task.wait(0.1)
-            end
-
+    while self.active and target.Parent and (tick() - startTime) < CONFIG.MAX_FOLLOW_TIME do
+        -- Check if target tracking is still enabled
+        if not self:isCurrentTargetEnabled() then
+            self.currentTarget = nil
             self.currentTargetName = nil
+            if humanoid then
+                humanoid:MoveTo(humanoidRootPart.Position)
+            end
+            print("❌ Target disabled during follow: " .. targetName)
             return false
         end
 
-        function AutoBuySystem:mainLoop()
-            while self.active do
-                if not self:isCurrentTargetEnabled() then
-                    self.currentTarget = nil
-                    self.currentTargetName = nil
-                    if humanoid then
-                        humanoid:MoveTo(humanoidRootPart.Position)
-                    end
-                    task.wait(1)
-                    continue
-                end
-                
-                local target, score = self:findBestTarget()
-                
-                if target then
-                    self.currentTarget = target
-                    self:followTarget(target)
-                else
-                    self.currentTargetName = nil
-                    task.wait(2)
-                end
-                
-                task.wait(0.5)
+        -- Check if target was purchased (including by others)
+        if isCharacterPurchased(target) then
+            print("✅ Target already purchased: " .. targetName)
+            return false
+        end
+
+        -- Verify target still exists and is valid
+        if not target.Parent or not target:FindFirstChild("HumanoidRootPart") then
+            print("❌ Target became invalid: " .. targetName)
+            return false
+        end
+
+        local distance = (humanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude
+
+        if distance <= CONFIG.AUTO_BUY_DISTANCE then
+            -- Final verification before purchase
+            if target.Name ~= targetName then
+                print("❌ Target name mismatch during purchase")
+                return false
+            end
+            
+            print("💰 In range, attempting purchase: " .. targetName)
+            local success = attemptPurchase(player, target)
+            if success then
+                task.wait(3) -- Wait longer after successful purchase
+                return true
+            else
+                print("❌ Purchase failed for: " .. targetName)
+                task.wait(2)
+                return false
             end
         end
+
+        -- Move towards target
+        humanoid:MoveTo(target.HumanoidRootPart.Position)
+        task.wait(0.15) -- Slightly longer delay for smoother movement
+    end
+
+    if tick() - startTime >= CONFIG.MAX_FOLLOW_TIME then
+        print("⏰ Follow timeout for: " .. targetName)
+    end
+
+    self.currentTargetName = nil
+    return false
+end
+
+function AutoBuySystem:mainLoop()
+    print("🔄 Auto Buy main loop started")
+    
+    while self.active do
+        -- Check if current target is still enabled
+        if not self:isCurrentTargetEnabled() then
+            self.currentTarget = nil
+            self.currentTargetName = nil
+            if humanoid then
+                humanoid:MoveTo(humanoidRootPart.Position)
+            end
+            task.wait(1)
+            continue
+        end
+        
+        local target, score = self:findBestTarget()
+        
+        if target then
+            print("🎯 New best target found: " .. target.Name .. " (score: " .. math.floor(score) .. ")")
+            self.currentTarget = target
+            self:followTarget(target)
+        else
+            self.currentTargetName = nil
+            -- Clean up old purchase records while idle
+            local currentTime = tick()
+            for uid, data in pairs(self.purchasedCharacters) do
+                if type(data) == "table" and data.timestamp and (currentTime - data.timestamp) > 300 then
+                    self.purchasedCharacters[uid] = nil
+                end
+            end
+            task.wait(2)
+        end
+        
+        task.wait(0.7) -- Slightly longer delay between cycles
+    end
+    
+    print("🛑 Auto Buy main loop stopped")
+end
 
     local function lockDoor()
         local lockerRoom = getPlayerLockerRoom()
@@ -667,107 +900,344 @@
         end
     end
 
-    -- Auto Lock System
-    local AutoLock = {
-        active = false,
-        connection = nil,
-        interval = 1,
-        timer = 0
-    }
+-- Auto Lock System with reduced logging
+local AutoLock = {
+    active = false,
+    connection = nil,
+    interval = 1,
+    timer = 0,
+    lastLogTime = 0,
+    successfulLocks = 0
+}
 
-    function AutoLock:toggle()
-        self.active = not self.active
-        gameData.settings.autoLockEnabled = self.active
+function AutoLock:toggle()
+    self.active = not self.active
+    gameData.settings.autoLockEnabled = self.active
 
-        if self.connection then
-            self.connection:Disconnect()
-            self.connection = nil
-        end
+    if self.connection then
+        self.connection:Disconnect()
+        self.connection = nil
+    end
 
-        if self.active then
-            print("🔒 Auto Lock system STARTED - locking every " .. self.interval .. " seconds")
-            -- Lock immediately when activated
-            lockDoor()
-            self.timer = 0
-            
-            self.connection = Services.RunService.Heartbeat:Connect(function(dt)
-                self.timer = (self.timer or 0) + dt
-                if self.timer >= self.interval then
-                    if self.active then
-                        lockDoor()
-                    end
-                    self.timer = 0
+    if self.active then
+        print("Auto Lock system STARTED - locking every " .. self.interval .. " seconds")
+        -- Lock immediately when activated
+        lockDoor()
+        self.timer = 0
+        self.lastLogTime = 0
+        self.successfulLocks = 0
+        
+        self.connection = Services.RunService.Heartbeat:Connect(function(dt)
+            self.timer = (self.timer or 0) + dt
+            if self.timer >= self.interval then
+                if self.active then
+                    lockDoor()
                 end
-            end)
+                self.timer = 0
+            end
+        end)
+    else
+        if self.successfulLocks > 0 then
+            print("Auto Lock system STOPPED - completed " .. self.successfulLocks .. " lock attempts")
         else
-            print("🔒 Auto Lock system STOPPED")
+            print("Auto Lock system STOPPED")
         end
-
-        if DataManager and DataManager.save then
-            DataManager:save(gameData)
-        end
+        self.successfulLocks = 0
     end
 
-    function AutoLock:forceStop()
-        if self.connection then
-            self.connection:Disconnect()
-            self.connection = nil
-        end
-        self.active = false
-        gameData.settings.autoLockEnabled = false
-        print("🔒 Auto Lock system FORCE STOPPED")
+    if DataManager and DataManager.save then
+        DataManager:save(gameData)
+    end
+end
+
+function AutoLock:forceStop()
+    if self.connection then
+        self.connection:Disconnect()
+        self.connection = nil
+    end
+    self.active = false
+    gameData.settings.autoLockEnabled = false
+    print("Auto Lock system FORCE STOPPED")
+    self.successfulLocks = 0
+end
+
+-- Auto Collect System with reduced logging
+local AutoCollect = {
+    active = false,
+    connection = nil,
+    interval = 0.5,
+    timer = 0,
+    lastLogTime = 0,
+    totalCollected = 0,
+    collectionsThisSession = 0
+}
+
+function AutoCollect:toggle()
+    self.active = not self.active
+    gameData.settings.autoCollectEnabled = self.active
+
+    if self.connection then
+        self.connection:Disconnect()
+        self.connection = nil
     end
 
-    -- Auto Collect System
-    local AutoCollect = {
-        active = false,
-        connection = nil,
-        interval = 0.5,
-        timer = 0
-    }
-
-    function AutoCollect:toggle()
-        self.active = not self.active
-        gameData.settings.autoCollectEnabled = self.active
-
-        if self.connection then
-            self.connection:Disconnect()
-            self.connection = nil
-        end
-
-        if self.active then
-            print("💰 Auto Collect system STARTED - collecting every " .. self.interval .. " seconds")
-            -- Collect immediately when activated
-            collectAllCash()
-            self.timer = 0
-            
-            self.connection = Services.RunService.Heartbeat:Connect(function(dt)
-                self.timer = (self.timer or 0) + dt
-                if self.timer >= self.interval then
-                    if self.active then
-                        collectAllCash()
-                    end
-                    self.timer = 0
+    if self.active then
+        print("Auto Collect system STARTED - collecting every " .. self.interval .. " seconds")
+        -- Collect immediately when activated
+        collectAllCash()
+        self.timer = 0
+        self.lastLogTime = 0
+        self.totalCollected = 0
+        self.collectionsThisSession = 0
+        
+        self.connection = Services.RunService.Heartbeat:Connect(function(dt)
+            self.timer = (self.timer or 0) + dt
+            if self.timer >= self.interval then
+                if self.active then
+                    collectAllCash()
                 end
-            end)
+                self.timer = 0
+            end
+        end)
+    else
+        if self.collectionsThisSession > 0 then
+            print("Auto Collect system STOPPED - completed " .. self.collectionsThisSession .. " collection cycles, total collected: " .. self.totalCollected)
         else
-            print("💰 Auto Collect system STOPPED")
+            print("Auto Collect system STOPPED")
         end
-
-        if DataManager and DataManager.save then
-            DataManager:save(gameData)
-        end
+        self.totalCollected = 0
+        self.collectionsThisSession = 0
     end
 
-    function AutoCollect:forceStop()
-        if self.connection then
-            self.connection:Disconnect()
-            self.connection = nil
-        end
-        self.active = false
-        gameData.settings.autoCollectEnabled = false
-        print("💰 Auto Collect system FORCE STOPPED")
+    if DataManager and DataManager.save then
+        DataManager:save(gameData)
     end
+end
+
+function AutoCollect:forceStop()
+    if self.connection then
+        self.connection:Disconnect()
+        self.connection = nil
+    end
+    self.active = false
+    gameData.settings.autoCollectEnabled = false
+    print("Auto Collect system FORCE STOPPED")
+    self.totalCollected = 0
+    self.collectionsThisSession = 0
+end
+
+-- Modified lockDoor function with reduced logging
+local function lockDoor()
+    local lockerRoom = getPlayerLockerRoom()
+    if not lockerRoom then 
+        -- Only warn occasionally about missing locker room
+        local now = os.time()
+        if not AutoLock.lastLogTime or (now - AutoLock.lastLogTime) > 30 then
+            warn("Could not find player locker room for auto lock")
+            AutoLock.lastLogTime = now
+        end
+        return 
+    end
+
+    local buttons = lockerRoom:FindFirstChild("Buttons")
+    if not buttons then 
+        local now = os.time()
+        if not AutoLock.lastLogTime or (now - AutoLock.lastLogTime) > 30 then
+            warn("No Buttons folder found in locker room")
+            AutoLock.lastLogTime = now
+        end
+        return 
+    end
+
+    local lockButton = buttons:FindFirstChild("DoorLockButton")
+    if not lockButton then 
+        local now = os.time()
+        if not AutoLock.lastLogTime or (now - AutoLock.lastLogTime) > 30 then
+            warn("No DoorLockButton found in Buttons folder")
+            AutoLock.lastLogTime = now
+        end
+        return 
+    end
+
+    local success = false
+    
+    -- Try multiple interaction methods for maximum compatibility
+    local buttonPart = lockButton:FindFirstChild("ButtonPressPartOO") or lockButton:FindFirstChild("Part")
+    if buttonPart then
+        -- Method 1: ClickDetector (most common)
+        local clickDetector = buttonPart:FindFirstChildOfClass("ClickDetector")
+        if clickDetector then
+            pcall(function()
+                fireclickdetector(clickDetector)
+                success = true
+                AutoLock.successfulLocks = AutoLock.successfulLocks + 1
+            end)
+            if success then return end
+        end
+        
+        -- Method 2: ProximityPrompt
+        local proximityPrompt = buttonPart:FindFirstChildOfClass("ProximityPrompt")
+        if proximityPrompt then
+            pcall(function()
+                fireproximityprompt(proximityPrompt)
+                success = true
+                AutoLock.successfulLocks = AutoLock.successfulLocks + 1
+            end)
+            if success then return end
+        end
+        
+        -- Method 3: Touch event as fallback
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            pcall(function()
+                firetouchinterest(buttonPart, player.Character.HumanoidRootPart, 0)
+                task.wait(0.1)
+                firetouchinterest(buttonPart, player.Character.HumanoidRootPart, 1)
+                success = true
+                AutoLock.successfulLocks = AutoLock.successfulLocks + 1
+            end)
+        end
+    end
+    
+    -- Try direct interaction with DoorLockButton if other methods failed
+    if not success then
+        local directPrompt = lockButton:FindFirstChildOfClass("ProximityPrompt") or lockButton:FindFirstChildOfClass("ClickDetector")
+        if directPrompt then
+            pcall(function()
+                if directPrompt:IsA("ProximityPrompt") then
+                    fireproximityprompt(directPrompt)
+                elseif directPrompt:IsA("ClickDetector") then
+                    fireclickdetector(directPrompt)
+                end
+                success = true
+                AutoLock.successfulLocks = AutoLock.successfulLocks + 1
+            end)
+        end
+    end
+    
+    -- Only warn about failures occasionally
+    if not success then
+        local now = os.time()
+        if not AutoLock.lastLogTime or (now - AutoLock.lastLogTime) > 60 then
+            warn("Failed to lock door - no compatible interaction method found")
+            AutoLock.lastLogTime = now
+        end
+    end
+end
+
+-- Modified collectAllCash function with minimal logging
+local function collectAllCash()
+    local lockerRoom = getPlayerLockerRoom()
+    if not lockerRoom then 
+        -- Only warn occasionally about missing locker room
+        local now = os.time()
+        if not AutoCollect.lastLogTime or (now - AutoCollect.lastLogTime) > 60 then
+            warn("Could not find player locker room for auto collect")
+            AutoCollect.lastLogTime = now
+        end
+        return 
+    end
+
+    local lockers = lockerRoom:FindFirstChild("Lockers")
+    if not lockers then 
+        local now = os.time()
+        if not AutoCollect.lastLogTime or (now - AutoCollect.lastLogTime) > 60 then
+            warn("No Lockers folder found in locker room")
+            AutoCollect.lastLogTime = now
+        end
+        return 
+    end
+
+    local collected = 0
+    local attempted = 0
+    
+    -- Silently iterate through all lockers in the room (10-20 lockers)
+    for _, locker in pairs(lockers:GetChildren()) do
+        if locker.Name:match("Locker%d+") and locker:FindFirstChild("Button") then
+            attempted = attempted + 1
+            local button = locker.Button
+            local lockerCollected = false
+            
+            -- Method 1: Try ClickDetector on button parts
+            for _, part in pairs(button:GetChildren()) do
+                if part:IsA("BasePart") and not lockerCollected then
+                    local clickDetector = part:FindFirstChildOfClass("ClickDetector")
+                    if clickDetector then
+                        pcall(function()
+                            fireclickdetector(clickDetector)
+                            lockerCollected = true
+                            collected = collected + 1
+                        end)
+                        if lockerCollected then break end
+                    end
+                end
+            end
+            
+            -- Method 2: Try ProximityPrompt on button parts
+            if not lockerCollected then
+                for _, part in pairs(button:GetChildren()) do
+                    if part:IsA("BasePart") and not lockerCollected then
+                        local proximityPrompt = part:FindFirstChildOfClass("ProximityPrompt")
+                        if proximityPrompt then
+                            pcall(function()
+                                fireproximityprompt(proximityPrompt)
+                                lockerCollected = true
+                                collected = collected + 1
+                            end)
+                            if lockerCollected then break end
+                        end
+                    end
+                end
+            end
+            
+            -- Method 3: Try RemoteEvent interaction (CashClaimManager)
+            if not lockerCollected then
+                local cashManager = button:FindFirstChild("CashClaimManager") or button:FindFirstChild("CashClaimManager2")
+                if cashManager then
+                    if cashManager:IsA("RemoteEvent") then
+                        pcall(function()
+                            cashManager:FireServer()
+                            lockerCollected = true
+                            collected = collected + 1
+                        end)
+                    elseif cashManager:IsA("LocalScript") or cashManager:IsA("Script") then
+                        for _, child in pairs(cashManager:GetChildren()) do
+                            if child:IsA("RemoteEvent") and not lockerCollected then
+                                pcall(function()
+                                    child:FireServer()
+                                    lockerCollected = true
+                                    collected = collected + 1
+                                end)
+                            end
+                        end
+                    end
+                end
+            end
+            
+            -- Method 4: Touch interaction as final fallback
+            if not lockerCollected and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local buttonPart = button:FindFirstChild("Part2") or button:FindFirstChild("Part")
+                if buttonPart then
+                    pcall(function()
+                        firetouchinterest(buttonPart, player.Character.HumanoidRootPart, 0)
+                        task.wait(0.05)
+                        firetouchinterest(buttonPart, player.Character.HumanoidRootPart, 1)
+                        lockerCollected = true
+                        collected = collected + 1
+                    end)
+                end
+            end
+            
+            -- Small delay between lockers to prevent overwhelming the server
+            if lockerCollected then
+                task.wait(0.02)
+            end
+        end
+    end
+    
+    -- Update totals silently
+    AutoCollect.totalCollected = AutoCollect.totalCollected + collected
+    AutoCollect.collectionsThisSession = AutoCollect.collectionsThisSession + 1
+end
 
         DataManager = {
             cache = {},
