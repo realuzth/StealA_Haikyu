@@ -231,7 +231,7 @@ local function safeSave()
     end
 end
 
--- Enhanced Auto Buy System with purchase tracking and re-purchase detection
+-- Enhanced Auto Buy System with movement-based purchase detection
 local AutoBuySystem = {
     active = false,
     currentTarget = nil,
@@ -240,125 +240,172 @@ local AutoBuySystem = {
     lastTargetUpdate = 0,
     purchasedCharacters = {},
     purchaseInProgress = {},
-    characterInstances = {}  -- Track specific character instances
+    movementTracking = {}  -- Track character movements to detect purchases
 }
 
--- Helper function to get unique character identifier
+-- Get player's spawn location for movement comparison
+local function getPlayerSpawnLocation()
+    local player = Services.Players.LocalPlayer
+    local spawn = player.RespawnLocation or workspace:FindFirstChild("SpawnLocation" .. player.Name)
+    return spawn and spawn.Position or nil
+end
+
+-- Start tracking a character's movement after we purchase it
+local function startMovementTracking(character)
+    local characterName = character.Name
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return end
+    
+    local playerSpawnPos = getPlayerSpawnLocation()
+    if not playerSpawnPos then return end
+    
+    AutoBuySystem.movementTracking[characterName] = {
+        character = character,
+        startPosition = humanoidRootPart.Position,
+        playerSpawnPosition = playerSpawnPos,
+        lastPosition = humanoidRootPart.Position,
+        startTime = tick(),
+        isMovingTowardsPlayer = true,
+        lastCheckTime = tick()
+    }
+    
+    print("📍 Started tracking movement for: " .. characterName)
+end
+
+-- Check if character is moving towards our spawn vs someone else's
+local function checkCharacterMovement(trackingData)
+    local character = trackingData.character
+    if not character or not character.Parent then return "removed" end
+    
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return "invalid" end
+    
+    local currentPos = humanoidRootPart.Position
+    local playerSpawnPos = trackingData.playerSpawnPosition
+    
+    -- Calculate distances
+    local distanceToPlayerSpawn = (currentPos - playerSpawnPos).Magnitude
+    local distanceFromStart = (currentPos - trackingData.startPosition).Magnitude
+    
+    -- Check if character has moved significantly (more than 5 units)
+    if distanceFromStart < 5 then
+        return "stationary" -- Still at spawn location, no movement yet
+    end
+    
+    -- Calculate movement direction
+    local movementVector = currentPos - trackingData.lastPosition
+    local directionToPlayerSpawn = (playerSpawnPos - currentPos).Unit
+    
+    if movementVector.Magnitude > 0.5 then -- Character is moving
+        local movementDirection = movementVector.Unit
+        local dotProduct = movementDirection:Dot(directionToPlayerSpawn)
+        
+        -- If dot product > 0.5, character is moving towards player spawn
+        -- If dot product < -0.5, character is moving away from player spawn
+        if dotProduct > 0.5 then
+            trackingData.isMovingTowardsPlayer = true
+            return "moving_to_player"
+        elseif dotProduct < -0.5 then
+            trackingData.isMovingTowardsPlayer = false
+            return "moving_to_other"
+        end
+    end
+    
+    -- Check if character is getting closer or farther from player spawn over time
+    local previousDistance = (trackingData.lastPosition - playerSpawnPos).Magnitude
+    if distanceToPlayerSpawn < previousDistance - 2 then
+        trackingData.isMovingTowardsPlayer = true
+        return "approaching_player"
+    elseif distanceToPlayerSpawn > previousDistance + 2 then
+        trackingData.isMovingTowardsPlayer = false
+        return "moving_away_from_player"
+    end
+    
+    return "unclear"
+end
+
+-- Update movement tracking for all purchased characters
+local function updateMovementTracking()
+    local currentTime = tick()
+    
+    for characterName, trackingData in pairs(AutoBuySystem.movementTracking) do
+        if currentTime - trackingData.lastCheckTime < 1 then continue end -- Check every second
+        
+        trackingData.lastCheckTime = currentTime
+        local status = checkCharacterMovement(trackingData)
+        
+        if status == "removed" or status == "invalid" then
+            -- Character was removed, likely reached destination
+            AutoBuySystem.movementTracking[characterName] = nil
+            continue
+        elseif status == "moving_to_other" or status == "moving_away_from_player" then
+            print("🔄 Detected " .. characterName .. " moving to another player - clearing purchase record")
+            
+            -- Clear our purchase record since another player bought it
+            for trackingID, purchaseData in pairs(AutoBuySystem.purchasedCharacters) do
+                if purchaseData.characterName == characterName then
+                    AutoBuySystem.purchasedCharacters[trackingID] = nil
+                end
+            end
+            
+            -- Stop tracking this character
+            AutoBuySystem.movementTracking[characterName] = nil
+            continue
+        end
+        
+        -- Update last position for next check
+        if trackingData.character and trackingData.character:FindFirstChild("HumanoidRootPart") then
+            trackingData.lastPosition = trackingData.character.HumanoidRootPart.Position
+        end
+        
+        -- Clean up old tracking (after 5 minutes)
+        if currentTime - trackingData.startTime > 300 then
+            print("🧹 Cleaning up old movement tracking for: " .. characterName)
+            AutoBuySystem.movementTracking[characterName] = nil
+        end
+    end
+end
+
+-- Helper function to get unique character identifier based on position
 local function getCharacterUID(character)
     if not character or not character.Parent then return nil end
     
-    local creationTime = character:GetAttribute("CreationTime")
-    if not creationTime then
-        local success, guid = pcall(function()
-            return Services.HttpService:GenerateGUID(false)
-        end)
-        
-        if success then
-            creationTime = guid
-        else
-            local pos = character:FindFirstChild("HumanoidRootPart")
-            local posString = pos and string.format("%.2f_%.2f_%.2f", pos.Position.X, pos.Position.Y, pos.Position.Z) or "nopos"
-            creationTime = tostring(tick()) .. "_" .. posString .. "_" .. tostring(math.random(10000, 99999))
-        end
-        
-        pcall(function()
-            character:SetAttribute("CreationTime", creationTime)
-        end)
-    end
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return nil end
     
-    return character.Name .. "_" .. tostring(creationTime)
+    local pos = humanoidRootPart.Position
+    return character.Name .. "_" .. string.format("%.1f_%.1f_%.1f", pos.X, pos.Y, pos.Z)
 end
 
--- Enhanced function to check if character was purchased by tracking instance existence
-local function isCharacterPurchasedAndStillExists(character)
+-- Check if character was purchased by us and is still valid
+local function isCharacterPurchased(character)
     local uid = getCharacterUID(character)
     if not uid then return false end
     
-    -- Check if we marked this specific instance as purchased
     local purchaseData = AutoBuySystem.purchasedCharacters[uid]
-    if purchaseData then
-        -- Verify the character instance still exists in workspace
-        if character.Parent == workspace then
-            return true -- We bought it and it's still there
-        else
-            -- Character was removed (likely bought by someone else after us)
-            -- Clear our purchase record so we can buy it again if it respawns
+    if not purchaseData then return false end
+    
+    -- If we have movement tracking for this character, check its status
+    local movementData = AutoBuySystem.movementTracking[character.Name]
+    if movementData then
+        if not movementData.isMovingTowardsPlayer then
+            -- Character is moving to another player, clear purchase record
             AutoBuySystem.purchasedCharacters[uid] = nil
-            AutoBuySystem.characterInstances[character.Name] = nil
-            print("🔄 Character " .. character.Name .. " was removed after purchase - ready to buy again")
             return false
         end
     end
     
-    -- Check if we're currently trying to purchase it
-    if AutoBuySystem.purchaseInProgress[uid] then
-        return true
+    -- Check if purchase was recent enough to still be valid
+    local timeSincePurchase = tick() - purchaseData.timestamp
+    if timeSincePurchase > 300 then -- 5 minutes
+        AutoBuySystem.purchasedCharacters[uid] = nil
+        return false
     end
     
-    -- Track this instance if we haven't seen it before
-    if not AutoBuySystem.characterInstances[character.Name] then
-        AutoBuySystem.characterInstances[character.Name] = {}
-    end
-    AutoBuySystem.characterInstances[character.Name][uid] = {
-        character = character,
-        firstSeen = tick()
-    }
-    
-    return false
+    return character.Parent == workspace
 end
 
--- Enhanced function to detect if a character respawned after being purchased by someone else
-local function detectCharacterRespawn(characterName)
-    if not AutoBuySystem.characterInstances[characterName] then return false end
-    
-    -- Get current instances in workspace
-    local currentInstances = {}
-    for _, obj in pairs(workspace:GetChildren()) do
-        if obj:IsA("Model") and obj.Name == characterName then
-            local uid = getCharacterUID(obj)
-            if uid then
-                currentInstances[uid] = obj
-            end
-        end
-    end
-    
-    -- Check if any previously tracked instances are missing
-    local respawnDetected = false
-    for trackedUID, data in pairs(AutoBuySystem.characterInstances[characterName]) do
-        if not currentInstances[trackedUID] and data.character.Parent ~= workspace then
-            -- This instance disappeared, likely bought by someone else
-            -- Clear our records for this instance
-            AutoBuySystem.purchasedCharacters[trackedUID] = nil
-            AutoBuySystem.characterInstances[characterName][trackedUID] = nil
-            respawnDetected = true
-            print("🔍 Detected " .. characterName .. " was bought by someone else - cleared purchase record")
-        end
-    end
-    
-    -- Update our tracked instances to current ones
-    for uid, obj in pairs(currentInstances) do
-        if not AutoBuySystem.characterInstances[characterName][uid] then
-            -- New instance appeared
-            AutoBuySystem.characterInstances[characterName][uid] = {
-                character = obj,
-                firstSeen = tick()
-            }
-        end
-    end
-    
-    return respawnDetected
-end
-
--- Check if character has already been purchased (enhanced version)
-local function isCharacterPurchased(character)
-    -- First run respawn detection for this character type
-    detectCharacterRespawn(character.Name)
-    
-    -- Then check if this specific instance was purchased
-    return isCharacterPurchasedAndStillExists(character)
-end
-
--- Mark character as purchased (enhanced version)
+-- Mark character as purchased and start movement tracking
 local function markCharacterPurchased(character, success)
     local uid = getCharacterUID(character)
     if not uid then return end
@@ -367,45 +414,30 @@ local function markCharacterPurchased(character, success)
         AutoBuySystem.purchasedCharacters[uid] = {
             timestamp = tick(),
             characterName = character.Name,
-            purchaseTime = os.time(),
-            characterInstance = character  -- Keep reference to the specific instance
+            purchaseTime = os.time()
         }
         
-        -- Update our instance tracking
-        if not AutoBuySystem.characterInstances[character.Name] then
-            AutoBuySystem.characterInstances[character.Name] = {}
-        end
-        AutoBuySystem.characterInstances[character.Name][uid] = {
-            character = character,
-            purchased = true,
-            purchaseTime = tick()
-        }
+        -- Start tracking this character's movement
+        startMovementTracking(character)
         
-        AutoBuySystem.purchaseInProgress[uid] = nil
-        print("✅ Successfully purchased: " .. character.Name .. " (UID: " .. uid:sub(-8) .. ")")
+        print("✅ Successfully purchased: " .. character.Name .. " - now tracking movement")
         
-        -- Clean up old purchase records after 5 minutes
-        spawn(function()
-            task.wait(300)
-            if AutoBuySystem.purchasedCharacters[uid] then
-                AutoBuySystem.purchasedCharacters[uid] = nil
+        -- Clean up old purchase records
+        local currentTime = tick()
+        for storedUID, data in pairs(AutoBuySystem.purchasedCharacters) do
+            if type(data) == "table" and data.timestamp and (currentTime - data.timestamp) > 600 then
+                AutoBuySystem.purchasedCharacters[storedUID] = nil
             end
-        end)
+        end
     else
-        AutoBuySystem.purchaseInProgress[uid] = nil
         print("❌ Failed to purchase: " .. character.Name)
     end
     
-    -- Clean up old tracking data
-    local currentTime = tick()
-    for storedUID, data in pairs(AutoBuySystem.purchasedCharacters) do
-        if type(data) == "table" and data.timestamp and (currentTime - data.timestamp) > 600 then
-            AutoBuySystem.purchasedCharacters[storedUID] = nil
-        end
-    end
+    -- Clear from in-progress
+    AutoBuySystem.purchaseInProgress[uid] = nil
 end
 
--- Mark character as being purchased
+-- Check if character is currently being purchased
 local function markCharacterInProgress(character)
     local uid = getCharacterUID(character)
     if not uid then return false end
@@ -419,6 +451,7 @@ local function markCharacterInProgress(character)
         characterName = character.Name
     }
     
+    -- Auto-cleanup after 15 seconds
     spawn(function()
         task.wait(15)
         if AutoBuySystem.purchaseInProgress[uid] then
@@ -429,7 +462,7 @@ local function markCharacterInProgress(character)
     return true
 end
 
--- Attempt to purchase a character using proximity prompts (unchanged)
+-- Main purchase attempt function (unchanged from your original)
 local function attemptPurchase(localPlayer, targetCharacter)
     if not targetCharacter or not targetCharacter.Parent then
         return false
@@ -515,18 +548,16 @@ function AutoBuySystem:toggle()
     if self.active then
         self.purchasedCharacters = {}
         self.purchaseInProgress = {}
-        self.characterInstances = {}  -- Clear instance tracking
+        self.movementTracking = {}
         spawn(function() self:mainLoop() end)
-        print("🤖 Auto Buy system ENABLED (Enhanced with re-purchase detection)")
+        print("🤖 Auto Buy system ENABLED with movement-based re-purchase detection")
     else
         self.currentTarget = nil
         self.currentTargetName = nil
+        self.movementTracking = {}
         if humanoid then
             humanoid:MoveTo(humanoidRootPart.Position)
         end
-        self.purchasedCharacters = {}
-        self.purchaseInProgress = {}
-        self.characterInstances = {}
         print("🛑 Auto Buy system DISABLED")
     end
 
@@ -546,14 +577,14 @@ function AutoBuySystem:findBestTarget()
     
     self.lastTargetUpdate = now
     
+    -- Update movement tracking before finding targets
+    updateMovementTracking()
+    
     for _, charName in ipairs(characterNames) do
         local charData = COMPLETE_DATABASE[charName]
         local trackData = gameData.characters[charName]
         
         if not trackData.enabled then continue end
-        
-        -- Run respawn detection for this character type
-        detectCharacterRespawn(charName)
         
         local target = workspace:FindFirstChild(charName)
         if target and target:IsA("Model") and target:FindFirstChild("HumanoidRootPart") then
@@ -570,7 +601,6 @@ function AutoBuySystem:findBestTarget()
             local rarityScore = (10 - charData.tier) * 100
             local mutationBonus = charData.mutation == "Diamond" and 500 or charData.mutation == "Golden" and 250 or 0
             local distancePenalty = distance * 3
-            
             local proximityBonus = math.max(0, (50 - distance) * 2)
             
             local score = rarityScore + mutationBonus + proximityBonus - distancePenalty
@@ -585,6 +615,7 @@ function AutoBuySystem:findBestTarget()
     return bestTarget, bestScore
 end
 
+-- Rest of the functions remain the same as in your original code
 function AutoBuySystem:followTarget(target)
     if not target or not target.Parent then return false end
     if isCharacterPurchased(target) then return false end
@@ -653,7 +684,7 @@ function AutoBuySystem:followTarget(target)
 end
 
 function AutoBuySystem:mainLoop()
-    print("🔄 Auto Buy main loop started (Enhanced)")
+    print("🔄 Auto Buy main loop started with movement tracking")
     
     while self.active do
         if not self:isCurrentTargetEnabled() then
@@ -666,6 +697,9 @@ function AutoBuySystem:mainLoop()
             continue
         end
         
+        -- Update movement tracking regularly
+        updateMovementTracking()
+        
         local target, score = self:findBestTarget()
         
         if target then
@@ -674,15 +708,6 @@ function AutoBuySystem:mainLoop()
             self:followTarget(target)
         else
             self.currentTargetName = nil
-            -- Clean up old tracking data periodically
-            local currentTime = tick()
-            for characterName, instances in pairs(self.characterInstances) do
-                for uid, data in pairs(instances) do
-                    if data.timestamp and (currentTime - data.timestamp) > 300 then
-                        instances[uid] = nil
-                    end
-                end
-            end
             task.wait(2)
         end
         
