@@ -2393,7 +2393,7 @@ function UIManager:createSettingsPanel()
 
     local panel = Instance.new("Frame")
     panel.Name = "SettingsPanel"
-    panel.Size = UDim2.new(0, 180, 0, 240)  -- Perfect height for content (reduced from 280)
+    panel.Size = UDim2.new(0, 180, 0, 210)  -- Reduced height to remove leftover space
     panel.Position = UDim2.new(1, -190, 0, 65)  -- Adjusted position for narrower width
     panel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
     panel.Visible = false
@@ -2512,20 +2512,15 @@ function UIManager:createSettingsPanel()
         local serverId = serverInput.Text:gsub("%s+", "")
         if serverId and serverId ~= "" then
             ServerTeleporter:teleportToServer(serverId)
+            serverInput.Text = "" -- Clear input after teleport
         end
     end
     
-    -- Teleport on Enter key press
+    -- Teleport on Enter key press or focus lost
     serverInput.FocusLost:Connect(function(enterPressed)
-        if enterPressed then
+        if enterPressed or serverInput.Text ~= "" then
             attemptTeleport()
         end
-    end)
-    
-    -- Also teleport when focus is lost (user clicks away)
-    serverInput.FocusLost:Connect(function()
-        task.wait(0.1) -- Small delay to ensure text is processed
-        attemptTeleport()
     end)
 
     makeSwitch("Auto Buy", "autoBuyEnabled", function()
@@ -3530,4 +3525,4 @@ function UIManager:updateCharacterList()
 
         task.wait(2)
         initialize()
-print(2+3)
+print(1-1)
