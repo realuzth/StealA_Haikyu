@@ -2511,15 +2511,22 @@ function UIManager:createSettingsPanel()
     local function attemptTeleport()
         local serverId = serverInput.Text:gsub("%s+", "")
         if serverId and serverId ~= "" then
+            print("Attempting teleport to server:", serverId)
             ServerTeleporter:teleportToServer(serverId)
-            serverInput.Text = "" -- Clear input after teleport
+            task.wait(0.1)
+            serverInput.Text = "" -- Clear input
         end
     end
     
-    -- Teleport on Enter key press or focus lost
+    -- Single event handler for both cases
+    local lastTeleportTime = 0
     serverInput.FocusLost:Connect(function(enterPressed)
-        if enterPressed or serverInput.Text ~= "" then
-            attemptTeleport()
+        local currentTime = tick()
+        if currentTime - lastTeleportTime > 0.5 then -- Prevent spam
+            if enterPressed or (serverInput.Text ~= "" and not enterPressed) then
+                lastTeleportTime = currentTime
+                attemptTeleport()
+            end
         end
     end)
 
@@ -3525,4 +3532,3 @@ function UIManager:updateCharacterList()
 
         task.wait(2)
         initialize()
-print(1-1)
