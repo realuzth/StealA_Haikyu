@@ -2393,7 +2393,7 @@ function UIManager:createSettingsPanel()
 
     local panel = Instance.new("Frame")
     panel.Name = "SettingsPanel"
-    panel.Size = UDim2.new(0, 180, 0, 280)  -- Narrower width (180) and taller height (280)
+    panel.Size = UDim2.new(0, 180, 0, 240)  -- Perfect height for content (reduced from 280)
     panel.Position = UDim2.new(1, -190, 0, 65)  -- Adjusted position for narrower width
     panel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
     panel.Visible = false
@@ -2469,16 +2469,16 @@ function UIManager:createSettingsPanel()
         end)
     end
 
-    -- Server Teleport section (above auto-buy as requested)
+    -- Server Teleport section (simplified single input)
     local teleportContainer = Instance.new("Frame")
-    teleportContainer.Size = UDim2.new(1, 0, 0, 60)
+    teleportContainer.Size = UDim2.new(1, 0, 0, 50)
     teleportContainer.LayoutOrder = 0
     teleportContainer.BackgroundTransparency = 1
     teleportContainer.ZIndex = 51
     teleportContainer.Parent = panel
 
     local teleportLabel = Instance.new("TextLabel")
-    teleportLabel.Size = UDim2.new(1, 0, 0, 20)
+    teleportLabel.Size = UDim2.new(1, 0, 0, 18)
     teleportLabel.BackgroundTransparency = 1
     teleportLabel.Text = "Server Teleport"
     teleportLabel.Font = Enum.Font.GothamBold
@@ -2489,12 +2489,12 @@ function UIManager:createSettingsPanel()
     teleportLabel.Parent = teleportContainer
 
     local serverInput = Instance.new("TextBox")
-    serverInput.Size = UDim2.new(0.65, 0, 0, 25)
-    serverInput.Position = UDim2.new(0, 0, 0, 25)
+    serverInput.Size = UDim2.new(1, 0, 0, 28)  -- Full width and slightly taller
+    serverInput.Position = UDim2.new(0, 0, 0, 22)
     serverInput.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
     serverInput.BorderSizePixel = 0
     serverInput.Text = ""
-    serverInput.PlaceholderText = "Server ID"
+    serverInput.PlaceholderText = "Enter Server ID to teleport..."
     serverInput.Font = Enum.Font.Gotham
     serverInput.TextSize = 12
     serverInput.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -2506,37 +2506,26 @@ function UIManager:createSettingsPanel()
     local inputCorner = Instance.new("UICorner")
     inputCorner.CornerRadius = UDim.new(0, 6)
     inputCorner.Parent = serverInput
-
-    local teleportBtn = Instance.new("TextButton")
-    teleportBtn.Size = UDim2.new(0.3, -5, 0, 25)
-    teleportBtn.Position = UDim2.new(0.7, 5, 0, 25)
-    teleportBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
-    teleportBtn.BorderSizePixel = 0
-    teleportBtn.Text = "Teleport"
-    teleportBtn.Font = Enum.Font.GothamBold
-    teleportBtn.TextSize = 11
-    teleportBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    teleportBtn.ZIndex = 52
-    teleportBtn.Parent = teleportContainer
     
-    -- Add rounded corners and hover effect to teleport button
-    local teleportCorner = Instance.new("UICorner")
-    teleportCorner.CornerRadius = UDim.new(0, 6)
-    teleportCorner.Parent = teleportBtn
-    
-    teleportBtn.MouseEnter:Connect(function()
-        teleportBtn.BackgroundColor3 = Color3.fromRGB(90, 150, 200)
-    end)
-    
-    teleportBtn.MouseLeave:Connect(function()
-        teleportBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
-    end)
-
-    teleportBtn.MouseButton1Click:Connect(function()
+    -- Auto-teleport function
+    local function attemptTeleport()
         local serverId = serverInput.Text:gsub("%s+", "")
         if serverId and serverId ~= "" then
             ServerTeleporter:teleportToServer(serverId)
         end
+    end
+    
+    -- Teleport on Enter key press
+    serverInput.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            attemptTeleport()
+        end
+    end)
+    
+    -- Also teleport when focus is lost (user clicks away)
+    serverInput.FocusLost:Connect(function()
+        task.wait(0.1) -- Small delay to ensure text is processed
+        attemptTeleport()
     end)
 
     makeSwitch("Auto Buy", "autoBuyEnabled", function()
@@ -3541,4 +3530,4 @@ function UIManager:updateCharacterList()
 
         task.wait(2)
         initialize()
-print("hello4")
+print(2+3)
