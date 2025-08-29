@@ -2494,7 +2494,7 @@ function UIManager:createSettingsPanel()
     serverInput.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
     serverInput.BorderSizePixel = 0
     serverInput.Text = ""
-    serverInput.PlaceholderText = "Enter Server ID to teleport..."
+    serverInput.PlaceholderText = "Type Server ID, press Enter"
     serverInput.Font = Enum.Font.Gotham
     serverInput.TextSize = 12
     serverInput.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -2507,38 +2507,16 @@ function UIManager:createSettingsPanel()
     inputCorner.CornerRadius = UDim.new(0, 6)
     inputCorner.Parent = serverInput
     
-    -- Auto-teleport function
-    local function attemptTeleport()
-        local serverId = serverInput.Text:gsub("%s+", "")
-        if serverId and serverId ~= "" then
-            print("Teleporting to server:", serverId)
-            ServerTeleporter:teleportToServer(serverId)
-            serverInput.Text = "" -- Clear input immediately
-        end
-    end
-    
-    -- Use TextChanged event instead of FocusLost
-    local lastText = ""
-    serverInput.Changed:Connect(function(property)
-        if property == "Text" then
-            local currentText = serverInput.Text
-            if currentText ~= lastText and currentText ~= "" then
-                lastText = currentText
-                -- Small delay to allow user to finish typing
-                task.spawn(function()
-                    task.wait(1) -- Wait 1 second after typing stops
-                    if serverInput.Text == currentText and currentText ~= "" then
-                        attemptTeleport()
-                    end
-                end)
-            end
-        end
-    end)
-    
-    -- Also handle Enter key specifically
+    -- Simple teleport on Enter key only
     serverInput.FocusLost:Connect(function(enterPressed)
-        if enterPressed and serverInput.Text ~= "" then
-            attemptTeleport()
+        if enterPressed then
+            local serverId = serverInput.Text:gsub("%s+", "")
+            if serverId ~= "" then
+                print("Teleporting to:", serverId)
+                ServerTeleporter:teleportToServer(serverId)
+            end
+            -- Always clear regardless of content
+            serverInput.Text = ""
         end
     end)
 
@@ -3544,4 +3522,3 @@ function UIManager:updateCharacterList()
 
         task.wait(2)
         initialize()
-print("meow")
