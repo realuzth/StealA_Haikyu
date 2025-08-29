@@ -2511,22 +2511,34 @@ function UIManager:createSettingsPanel()
     local function attemptTeleport()
         local serverId = serverInput.Text:gsub("%s+", "")
         if serverId and serverId ~= "" then
-            print("Attempting teleport to server:", serverId)
+            print("Teleporting to server:", serverId)
             ServerTeleporter:teleportToServer(serverId)
-            task.wait(0.1)
-            serverInput.Text = "" -- Clear input
+            serverInput.Text = "" -- Clear input immediately
         end
     end
     
-    -- Single event handler for both cases
-    local lastTeleportTime = 0
-    serverInput.FocusLost:Connect(function(enterPressed)
-        local currentTime = tick()
-        if currentTime - lastTeleportTime > 0.5 then -- Prevent spam
-            if enterPressed or (serverInput.Text ~= "" and not enterPressed) then
-                lastTeleportTime = currentTime
-                attemptTeleport()
+    -- Use TextChanged event instead of FocusLost
+    local lastText = ""
+    serverInput.Changed:Connect(function(property)
+        if property == "Text" then
+            local currentText = serverInput.Text
+            if currentText ~= lastText and currentText ~= "" then
+                lastText = currentText
+                -- Small delay to allow user to finish typing
+                task.spawn(function()
+                    task.wait(1) -- Wait 1 second after typing stops
+                    if serverInput.Text == currentText and currentText ~= "" then
+                        attemptTeleport()
+                    end
+                end)
             end
+        end
+    end)
+    
+    -- Also handle Enter key specifically
+    serverInput.FocusLost:Connect(function(enterPressed)
+        if enterPressed and serverInput.Text ~= "" then
+            attemptTeleport()
         end
     end)
 
@@ -3532,4 +3544,4 @@ function UIManager:updateCharacterList()
 
         task.wait(2)
         initialize()
-print("goat")
+print("meow")
