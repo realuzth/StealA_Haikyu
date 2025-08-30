@@ -26,36 +26,7 @@ local WEBHOOKS = {
     MYTHIC = "https://discord.com/api/webhooks/1410256210631983144/93LJrnzj-JPqcmFeeCX36bSk0b5mT6DSme1KP6AVEoAdrU9lxYPC1DojGXY1YZEGO02w",
     LEGENDARY = "https://discord.com/api/webhooks/1410282981041639465/oVnjhlYrDMWh0rkHDY47DiYAPYe3vUN7s97wJXkwMNM8N10eDn4yMYR1JaCuZ3R-XkbP"
 }
-
--- SERVER TELEPORT SYSTEM (Above auto buy in settings as requested)
-local ServerTeleporter = {
-    targetServerId = nil,
-    teleporting = false
-}
-
-function ServerTeleporter:teleportToServer(serverId)
-    if self.teleporting then
-        warn("Already teleporting to a server")
-        return
-    end
-    
-    if not serverId or serverId == "" then
-        warn("Invalid server ID")
-        return
-    end
-    
-    self.teleporting = true
-    print("🌐 Attempting to teleport to server: " .. serverId)
-    
-    local success, error = pcall(function()
-        Services.TeleportService:TeleportToPlaceInstance(game.PlaceId, serverId, Services.Players.LocalPlayer)
-    end)
-    
-    if not success then
-        warn("❌ Failed to teleport: " .. tostring(error))
-        self.teleporting = false
-    end
-end
+print("hello")
 -- Enhanced SpawnLocation Detection System
 local SPAWN_LOCATIONS = {
     "SpawnLocation1", "SpawnLocation2", "SpawnLocation3", "SpawnLocation4",
@@ -2422,8 +2393,8 @@ function UIManager:createSettingsPanel()
 
     local panel = Instance.new("Frame")
     panel.Name = "SettingsPanel"
-    panel.Size = UDim2.new(0, 180, 0, 210)  -- Reduced height to remove leftover space
-    panel.Position = UDim2.new(1, -190, 0, 65)  -- Adjusted position for narrower width
+    panel.Size = UDim2.new(0, 200, 0, 180)  -- Reduced from 220x240 to 200x180
+    panel.Position = UDim2.new(1, -210, 0, 65)  -- Adjusted position
     panel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
     panel.Visible = false
     panel.ZIndex = 50
@@ -2481,11 +2452,6 @@ function UIManager:createSettingsPanel()
         btn.TextSize = 12
         btn.ZIndex = 53
         btn.Parent = container
-        
-        -- Add rounded corners to switch buttons
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 8)
-        btnCorner.Parent = btn
 
         btn.MouseButton1Click:Connect(function()
             gameData.settings[settingKey] = not gameData.settings[settingKey]
@@ -2498,16 +2464,16 @@ function UIManager:createSettingsPanel()
         end)
     end
 
-    -- Server Teleport section (simplified single input)
+    -- Server Teleport section (above auto-buy as requested)
     local teleportContainer = Instance.new("Frame")
-    teleportContainer.Size = UDim2.new(1, 0, 0, 50)
+    teleportContainer.Size = UDim2.new(1, 0, 0, 60)
     teleportContainer.LayoutOrder = 0
     teleportContainer.BackgroundTransparency = 1
     teleportContainer.ZIndex = 51
     teleportContainer.Parent = panel
 
     local teleportLabel = Instance.new("TextLabel")
-    teleportLabel.Size = UDim2.new(1, 0, 0, 18)
+    teleportLabel.Size = UDim2.new(1, 0, 0, 20)
     teleportLabel.BackgroundTransparency = 1
     teleportLabel.Text = "Server Teleport"
     teleportLabel.Font = Enum.Font.GothamBold
@@ -2518,34 +2484,35 @@ function UIManager:createSettingsPanel()
     teleportLabel.Parent = teleportContainer
 
     local serverInput = Instance.new("TextBox")
-    serverInput.Size = UDim2.new(1, 0, 0, 28)  -- Full width and slightly taller
-    serverInput.Position = UDim2.new(0, 0, 0, 22)
+    serverInput.Size = UDim2.new(0.65, 0, 0, 25)
+    serverInput.Position = UDim2.new(0, 0, 0, 25)
     serverInput.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
     serverInput.BorderSizePixel = 0
     serverInput.Text = ""
-    serverInput.PlaceholderText = "Type Server ID, press Enter"
+    serverInput.PlaceholderText = "Server ID"
     serverInput.Font = Enum.Font.Gotham
     serverInput.TextSize = 12
     serverInput.TextColor3 = Color3.fromRGB(255, 255, 255)
     serverInput.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
     serverInput.ZIndex = 52
     serverInput.Parent = teleportContainer
-    
-    -- Add rounded corners to input
-    local inputCorner = Instance.new("UICorner")
-    inputCorner.CornerRadius = UDim.new(0, 6)
-    inputCorner.Parent = serverInput
-    
-    -- Simple teleport on Enter key only
-    serverInput.FocusLost:Connect(function(enterPressed)
-        if enterPressed then
-            local serverId = serverInput.Text:gsub("%s+", "")
-            if serverId ~= "" then
-                print("Teleporting to:", serverId)
-                ServerTeleporter:teleportToServer(serverId)
-            end
-            -- Always clear regardless of content
-            serverInput.Text = ""
+
+    local teleportBtn = Instance.new("TextButton")
+    teleportBtn.Size = UDim2.new(0.3, -5, 0, 25)
+    teleportBtn.Position = UDim2.new(0.7, 5, 0, 25)
+    teleportBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+    teleportBtn.BorderSizePixel = 0
+    teleportBtn.Text = "Teleport"
+    teleportBtn.Font = Enum.Font.GothamBold
+    teleportBtn.TextSize = 11
+    teleportBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    teleportBtn.ZIndex = 52
+    teleportBtn.Parent = teleportContainer
+
+    teleportBtn.MouseButton1Click:Connect(function()
+        local serverId = serverInput.Text:gsub("%s+", "")
+        if serverId and serverId ~= "" then
+            ServerTeleporter:teleportToServer(serverId)
         end
     end)
 
@@ -2561,31 +2528,17 @@ function UIManager:createSettingsPanel()
         AutoCollect:toggle()
     end, 3)
 
-    -- Clear Data button with improved styling
+    -- Clear Data button
     local clearBtn = Instance.new("TextButton")
-    clearBtn.Size = UDim2.new(1, 0, 0, 35)  -- Slightly taller for better proportion
+    clearBtn.Size = UDim2.new(1, 0, 0, 30)
     clearBtn.LayoutOrder = 4
-    clearBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+    clearBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     clearBtn.TextColor3 = Color3.new(1, 1, 1)
-    clearBtn.Text = "🗑️ Clear Data"
+    clearBtn.Text = "Clear Data"
     clearBtn.Font = Enum.Font.GothamBold
-    clearBtn.TextSize = 13
+    clearBtn.TextSize = 12
     clearBtn.ZIndex = 53
     clearBtn.Parent = panel
-    
-    -- Add rounded corners to clear button
-    local clearCorner = Instance.new("UICorner")
-    clearCorner.CornerRadius = UDim.new(0, 8)
-    clearCorner.Parent = clearBtn
-    
-    -- Add hover effects to clear button
-    clearBtn.MouseEnter:Connect(function()
-        clearBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
-    end)
-    
-    clearBtn.MouseLeave:Connect(function()
-        clearBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
-    end)
 
     clearBtn.MouseButton1Click:Connect(function()
         if DataManager and DataManager.clear then
@@ -3551,3 +3504,4 @@ function UIManager:updateCharacterList()
 
         task.wait(2)
         initialize()
+print("hel")
